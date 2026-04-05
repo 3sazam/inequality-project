@@ -1,0 +1,49 @@
+/* src/pages/Home.module.css */
+
+.container {
+  /* Takes up the full height of the screen */
+  min-height: 100vh; 
+  /* Uses Flexbox to center the form perfectly */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-family: sans-serif;
+  background-color: #f8f9fa; /* Optional light background */
+}
+
+.form {
+  /* Uses Flexbox to stack the input and button */
+  display: flex;
+  flex-direction: column;
+  gap: 1rem; /* Adds a nice space between the input and button */
+  width: 100%;
+  max-width: 300px; /* Prevents the inputs from stretching too wide on big screens */
+}
+
+.input {
+  padding: 0.75rem;
+  font-size: 1rem;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #007BFF;
+}
+
+.button {
+  padding: 0.75rem;
+  font-size: 1rem;
+  cursor: pointer;
+  background-color: #007BFF;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.button:hover {
+  background-color: #0056b3;
+}
