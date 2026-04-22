@@ -1,49 +1,152 @@
-/* src/pages/Home.module.css */
+/* Fonts imported globally in index.css */
 
 .container {
-  /* Takes up the full height of the screen */
-  min-height: 100vh; 
-  /* Uses Flexbox to center the form perfectly */
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
-  justify-content: center;
   align-items: center;
-  font-family: sans-serif;
-  background-color: #f8f9fa; /* Optional light background */
+  justify-content: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  background-color: #f2ebe0;
+  position: relative;
+}
+
+/* Grain texture */
+.container::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 300px 300px;
+  opacity: 0.045;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.main {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(1.6rem, 3vw, 2.8rem);
+  width: 100%;
+  max-width: 420px;
+}
+
+.logo {
+  width: clamp(80px, 9vw, 120px);
+  height: clamp(68px, 7.5vw, 100px);
+  -webkit-mask: url('/Images/DivideLogo.png') center / contain no-repeat;
+  mask: url('/Images/DivideLogo.png') center / contain no-repeat;
+  background-color: #1c4d2e;
+  margin-bottom: -0.4rem;
+}
+
+.title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: clamp(3.8rem, 8.2vw, 6.4rem);
+  letter-spacing: -0.01em;
+  color: #1a1a16;
+  margin: 0;
+  line-height: 1;
 }
 
 .form {
-  /* Uses Flexbox to stack the input and button */
   display: flex;
   flex-direction: column;
-  gap: 1rem; /* Adds a nice space between the input and button */
+  align-items: center;
+  gap: 1rem;
+}
+
+.toggle {
+  display: inline-flex;
+  background: rgba(26, 26, 22, 0.05);
+  border: 1px solid rgba(26, 26, 22, 0.12);
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.toggleButton {
+  padding: 0.4rem 1rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.78rem;
+  color: rgba(26, 26, 22, 0.5);
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.toggleActive {
+  background: #1c4d2e;
+  color: #f2ebe0;
+}
+
+.inputWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   width: 100%;
-  max-width: 300px; /* Prevents the inputs from stretching too wide on big screens */
+  max-width: 360px;
+  border-bottom: 1px solid rgba(26, 26, 22, 0.28);
+  transition: border-color 0.2s;
+}
+
+.inputWrap:focus-within {
+  border-bottom-color: rgba(26, 26, 22, 0.7);
+}
+
+.prefix {
+  font-family: system-ui, sans-serif;
+  font-size: 0.95rem;
+  color: rgba(26, 26, 22, 0.4);
 }
 
 .input {
-  padding: 0.75rem;
-  font-size: 1rem;
-  border-radius: 4px;
-  border: 1px solid #ccc;
-  transition: border-color 0.2s ease-in-out;
-}
-
-.input:focus {
-  outline: none;
-  border-color: #007BFF;
-}
-
-.button {
-  padding: 0.75rem;
-  font-size: 1rem;
-  cursor: pointer;
-  background-color: #007BFF;
-  color: white;
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0;
+  font-size: 0.95rem;
+  font-family: system-ui, sans-serif;
+  font-weight: 400;
+  color: #1a1a16;
+  background: transparent;
   border: none;
-  border-radius: 4px;
-  transition: background-color 0.2s ease-in-out;
+  border-radius: 0;
+  outline: none;
+  text-align: center;
+  -moz-appearance: textfield;
 }
 
-.button:hover {
-  background-color: #0056b3;
+.hint {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  font-size: 0.72rem;
+  color: rgba(26, 26, 22, 0.38);
+  text-align: center;
 }
+
+.input::-webkit-outer-spin-button,
+.input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+.input::placeholder {
+  color: rgba(26, 26, 22, 0.35);
+}
+
+.enterHint {
+  margin: 0.5rem 0 0;
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(26, 26, 22, 0.32);
+  text-align: center;
+}
+

@@ -1,33 +1,72 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-// 1. Import the CSS module
 import styles from './home.module.css';
+
+type Frequency = 'monthly' | 'annual';
 
 export default function Home() {
   const [inputValue, setInputValue] = useState('');
+  const [frequency, setFrequency] = useState<Frequency>('monthly');
   const navigate = useNavigate();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/3d-experience', { state: { userInput: inputValue } });
+    const raw = Number(inputValue);
+    if (!raw || raw <= 0) return;
+    const monthly = frequency === 'monthly' ? raw : raw / 12;
+    navigate('/3d-experience', { state: { userInput: monthly } });
   };
 
+  const placeholder = frequency === 'monthly' ? 'Enter your income' : 'Enter your income';
+  const hint = frequency === 'monthly'
+    ? 'UK median take-home is around £2,300/month'
+    : 'UK median take-home is around £27,600/year';
+
   return (
-    // 2. Apply the styles using the imported object
     <div className={styles.container}>
-      <form onSubmit={handleSubmit} className={styles.form}>
-        <input 
-          type="text" 
-          placeholder="Enter your income..." 
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          className={styles.input}
-          required
-        />
-        <button type="submit" className={styles.button}>
-          Generate Experience
-        </button>
-      </form>
+      <main className={styles.main}>
+        <div className={styles.logo} role="img" aria-label="Divide" />
+        <h1 className={styles.title}>Divide</h1>
+
+        <form onSubmit={handleSubmit} className={styles.form}>
+          <div className={styles.toggle} role="tablist" aria-label="Income frequency">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={frequency === 'monthly'}
+              className={`${styles.toggleButton} ${frequency === 'monthly' ? styles.toggleActive : ''}`}
+              onClick={() => setFrequency('monthly')}
+            >
+              Monthly
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={frequency === 'annual'}
+              className={`${styles.toggleButton} ${frequency === 'annual' ? styles.toggleActive : ''}`}
+              onClick={() => setFrequency('annual')}
+            >
+              Annual
+            </button>
+          </div>
+
+          <div className={styles.inputWrap}>
+            <span className={styles.prefix}>£</span>
+            <input
+              type="number"
+              placeholder={placeholder}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              className={styles.input}
+              min="1"
+              required
+            />
+          </div>
+
+          <p className={styles.hint}>{hint}</p>
+          <p className={styles.enterHint}>Press Enter ↵</p>
+        </form>
+      </main>
     </div>
   );
 }
