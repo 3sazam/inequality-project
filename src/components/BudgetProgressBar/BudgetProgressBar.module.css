@@ -1,0 +1,140 @@
+.root {
+  --track-w: 44px;
+  --track-h: 46vh;
+  --fg: #1a1a16;
+  --fill: rgba(28, 68, 42, 0.7);
+  --track-bg: rgba(26, 26, 22, 0.06);
+  --track-border: rgba(26, 26, 22, 0.1);
+  --chip-fg: #8b2216;
+  --chip-bg: rgba(139, 34, 22, 0.07);
+  --chip-border: rgba(139, 34, 22, 0.18);
+
+  position: fixed;
+  top: 50%;
+  right: 36px;
+  transform: translateY(-50%);
+  z-index: 100;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+
+  padding: 1.2rem 1rem;
+  border-radius: 14px;
+  background: rgba(242, 235, 224, 0.82);
+  border: 1px solid rgba(26, 26, 22, 0.13);
+
+  user-select: none;
+  font-family: system-ui, -apple-system, sans-serif;
+
+  /* Anchor point for absolutely-positioned chip below the bar. */
+  isolation: isolate;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: center;
+}
+
+.label {
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(26, 26, 22, 0.38);
+}
+
+.amount {
+  font-family: 'Instrument Serif', 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.5rem;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.percent {
+  font-size: 0.8rem;
+  color: rgba(26, 26, 22, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  position: relative;
+  width: var(--track-w);
+  height: var(--track-h);
+  border-radius: 4px;
+  background: var(--track-bg);
+  border: 1px solid var(--track-border);
+  overflow: hidden;
+}
+
+.fill {
+  position: absolute;
+  inset: 0;
+  background: var(--fill);
+  border-radius: 3px;
+  transform-origin: bottom;
+  transform: scaleY(var(--pct, 1));
+  transition: transform 550ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+.footnote {
+  font-size: 0.62rem;
+  color: rgba(26, 26, 22, 0.32);
+  letter-spacing: 0.03em;
+}
+
+.chip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-top: 10px;
+  padding: 0.22rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  color: var(--chip-fg);
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+  transition: opacity 300ms ease, transform 300ms ease;
+  pointer-events: none;
+}
+
+.chipVisible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Mobile */
+@media (max-width: 720px) {
+  .root {
+    right: 10px;
+    gap: 8px;
+    padding: 0.75rem 0.6rem;
+    border-radius: 10px;
+    --track-w: 28px;
+    --track-h: 34vh;
+  }
+  .amount {
+    font-size: 1.1rem;
+  }
+  .chip {
+    display: none;
+  }
+}
+
+/* Respect users who prefer no motion */
+@media (prefers-reduced-motion: reduce) {
+  .fill,
+  .chip {
+    transition: none;
+  }
+}
