@@ -98,7 +98,10 @@ export type Expense = {
   kind: ExpenseKind;
   group: string;
   label: string;
+  /** Factual copy shown in Average mode (no controls). */
   description: string;
+  /** Action-oriented copy shown in Custom mode. Falls back to `description` if absent. */
+  descriptionCustom?: string;
   amount: number;          // monthly £, already rounded
   model?: string;
   derived?: boolean;       // true = computed from income, not directly editable
@@ -143,7 +146,8 @@ export function buildExpenses(
       kind: 'rent',
       group: 'Housing',
       label: 'Rent / Mortgage',
-      description: 'The single largest line for most people. Move the slider to your actual rent or mortgage payment.',
+      description: 'For most people, the biggest chunk — typically around a third of take-home pay.',
+      descriptionCustom: 'Drag to what you actually pay each month.',
       amount: rent,
       model: SECTION_MODELS['section-housing'],
     },
@@ -152,7 +156,8 @@ export function buildExpenses(
       kind: 'utilities',
       group: 'Bills',
       label: 'Utilities',
-      description: 'Energy, gas, water, electric, Wi-Fi — the everyday keep-the-lights-on bills.',
+      description: 'Energy, gas, water, electric, Wi-Fi. The everyday keep-the-lights-on bills.',
+      descriptionCustom: 'Slide to match your monthly bills — energy, gas, water, electric, Wi-Fi.',
       amount: utilities,
       model: SECTION_MODELS['section-utilities'],
     },
@@ -162,6 +167,7 @@ export function buildExpenses(
       group: 'Essentials',
       label: 'Groceries',
       description: 'What a single adult typically spends on a weekly food shop across the month.',
+      descriptionCustom: 'Slide to your typical monthly food spend.',
       amount: groceries,
       model: SECTION_MODELS['section-groceries'],
     },
@@ -170,7 +176,8 @@ export function buildExpenses(
       kind: 'transport',
       group: 'Getting around',
       label: 'Transport',
-      description: 'Season ticket, fuel, the occasional taxi. Slide to nothing if you walk everywhere.',
+      description: 'Season ticket, fuel, the occasional taxi. The cost of getting around.',
+      descriptionCustom: 'Slide to nothing if you walk everywhere — or up if you commute.',
       amount: transport,
       model: SECTION_MODELS['section-transport'],
     },
@@ -179,7 +186,8 @@ export function buildExpenses(
       kind: 'incomeTax',
       group: 'Taxes',
       label: 'Income Tax',
-      description: 'Tapered bands — 20%, 40%, 45%. Calculated automatically from your annual gross.',
+      description: 'Taken before you see it. Starts at 20% and rises with each bracket above.',
+      // Derived — no user control even in Custom mode, so keep one copy.
       amount: incomeTax,
       model: SECTION_MODELS['section-income-tax'],
       derived: true,
@@ -189,7 +197,8 @@ export function buildExpenses(
       kind: 'ni',
       group: 'Taxes',
       label: 'National Insurance',
-      description: '8% between £12,570 and £50,270, then 2% above. Funds the NHS and state pension.',
+      description: 'A second deduction on top of income tax, quietly funding the NHS and state pension.',
+      // Derived — no user control even in Custom mode.
       amount: ni,
       model: SECTION_MODELS['section-ni'],
       derived: true,
@@ -199,7 +208,8 @@ export function buildExpenses(
       kind: 'pension',
       group: 'Saving',
       label: 'Pension',
-      description: 'Money set aside for later. Pick the percentage you contribute each month.',
+      description: 'Deferred income — yours in retirement. Your employer is required to top it up too.',
+      descriptionCustom: 'Pick the percentage you put in each month.',
       amount: pension,
       model: SECTION_MODELS['section-pension'],
     },
@@ -208,7 +218,8 @@ export function buildExpenses(
       kind: 'student',
       group: 'Debts',
       label: 'Student Loan',
-      description: '9% of anything earned above the plan threshold. Pick your plan — or none.',
+      description: 'Repaid at 9% on whatever you earn above the threshold. Nothing owed below it.',
+      descriptionCustom: 'Pick your repayment plan — or none if you never took one out.',
       amount: studentLoan,
       model: SECTION_MODELS['section-student'],
     },
@@ -217,7 +228,8 @@ export function buildExpenses(
       kind: 'council',
       group: 'Taxes',
       label: 'Council Tax',
-      description: 'Paid to your local authority. The band reflects your property’s 1991 value.',
+      description: "Paid to your local council. The band is based on a valuation that hasn't changed since 1991.",
+      descriptionCustom: 'Pick the band for where you live.',
       amount: council,
       model: SECTION_MODELS['section-council'],
     },

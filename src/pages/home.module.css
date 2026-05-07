@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   padding: clamp(1rem, 4vw, 3rem);
-  background-color: #f2ebe0;
+  background-color: transparent;
   position: relative;
 }
 
@@ -21,38 +21,86 @@
   background-size: 300px 300px;
   opacity: 0.045;
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
 }
 
 .main {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(1.6rem, 3vw, 2.8rem);
+  gap: clamp(1.6rem, 2.8vw, 2.4rem);
   width: 100%;
-  max-width: 420px;
+  max-width: 700px;
 }
 
 .logo {
-  width: clamp(80px, 9vw, 120px);
-  height: clamp(68px, 7.5vw, 100px);
+  position: fixed;
+  top: 56px;
+  left: 56px;
+  z-index: 200;
+  width: 64px;
+  height: 57px;
   -webkit-mask: url('/Images/DivideLogo.png') center / contain no-repeat;
   mask: url('/Images/DivideLogo.png') center / contain no-repeat;
   background-color: #1c4d2e;
-  margin-bottom: -0.4rem;
+}
+
+@media (max-width: 720px) {
+  .logo {
+    top: 24px;
+    left: 24px;
+    width: 48px;
+    height: 43px;
+  }
 }
 
 .title {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-style: normal;
-  font-weight: 500;
-  font-size: clamp(3.8rem, 8.2vw, 6.4rem);
-  letter-spacing: -0.01em;
-  color: #1a1a16;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 400;
+  font-size: clamp(1.55rem, 3.2vw, 2.4rem);
+  letter-spacing: 0em;
+  color: #1c4d2e;
   margin: 0;
-  line-height: 1;
+  line-height: 1.15;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Phones: let the title wrap so the stretched "wider" + neighbours can
+ * never overflow the viewport. Single-line layout is desktop-only. */
+@media (max-width: 720px) {
+  .title {
+    white-space: normal;
+    line-height: 1.25;
+    font-size: clamp(1.6rem, 7vw, 2.2rem);
+  }
+}
+
+/* Stretch the letterforms themselves (no extra kerning) so "wider" literally
+ * reads wider than its neighbours — each glyph is horizontally scaled. The
+ * margin compensates for the transform: scaleX doesn't widen the layout box,
+ * so without margin the stretched glyphs collide with neighbouring words. */
+.wider {
+  display: inline-block;
+  font-weight: 700;
+  transform: scaleX(1.45);
+  transform-origin: center;
+  margin: 0 0.6em;
+  transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+              margin   0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  cursor: default;
+}
+
+/* Hover-stretch only on devices that actually support hover. On touch
+ * devices :hover sticks after a tap and looks broken; this also keeps
+ * narrow phone layouts from being driven into overflow by a stale hover. */
+@media (hover: hover) {
+  .wider:hover {
+    transform: scaleX(2.2);
+    margin: 0 1.5em;
+  }
 }
 
 .form {
@@ -62,73 +110,41 @@
   gap: 1rem;
 }
 
-.toggle {
-  display: inline-flex;
-  background: rgba(26, 26, 22, 0.05);
-  border: 1px solid rgba(26, 26, 22, 0.12);
-  border-radius: 999px;
-  padding: 3px;
-}
-
-.toggleButton {
-  padding: 0.4rem 1rem;
-  font-family: system-ui, sans-serif;
-  font-size: 0.78rem;
-  color: rgba(26, 26, 22, 0.5);
-  background: transparent;
-  border: none;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s;
-}
-
-.toggleActive {
-  background: #1c4d2e;
-  color: #f2ebe0;
-}
-
-.inputWrap {
+/* Clean flat input bar */
+.inputBar {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  width: 100%;
-  max-width: 360px;
-  border-bottom: 1px solid rgba(26, 26, 22, 0.28);
-  transition: border-color 0.2s;
-}
-
-.inputWrap:focus-within {
-  border-bottom-color: rgba(26, 26, 22, 0.7);
+  gap: 0.5rem;
+  padding: 0.85rem 1.6rem;
+  background: rgba(242, 235, 224, 0.97);
+  border: 1px solid rgba(26, 26, 22, 0.14);
+  width: auto;
+  min-width: 300px;
 }
 
 .prefix {
-  font-family: system-ui, sans-serif;
-  font-size: 0.95rem;
-  color: rgba(26, 26, 22, 0.4);
+  font-family: 'General Sans', system-ui, sans-serif;
+  font-weight: 300;
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  color: rgba(26, 26, 22, 0.38);
+  flex-shrink: 0;
 }
 
 .input {
   flex: 1;
   min-width: 0;
-  padding: 0.6rem 0;
-  font-size: 0.95rem;
-  font-family: system-ui, sans-serif;
-  font-weight: 400;
+  padding: 0;
+  font-size: 0.9rem;
+  font-family: 'General Sans', system-ui, sans-serif;
+  font-weight: 300;
+  letter-spacing: 0.04em;
   color: #1a1a16;
   background: transparent;
   border: none;
-  border-radius: 0;
   outline: none;
   text-align: center;
   -moz-appearance: textfield;
-}
-
-.hint {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  font-size: 0.72rem;
-  color: rgba(26, 26, 22, 0.38);
-  text-align: center;
 }
 
 .input::-webkit-outer-spin-button,
@@ -137,16 +153,41 @@
 }
 
 .input::placeholder {
-  color: rgba(26, 26, 22, 0.35);
+  color: rgba(26, 26, 22, 0.25);
 }
 
-.enterHint {
-  margin: 0.5rem 0 0;
-  font-family: system-ui, sans-serif;
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
+.enterBtn {
+  padding: 0.42rem 1.1rem;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 500;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(26, 26, 22, 0.32);
-  text-align: center;
+  color: rgba(26, 26, 22, 0.65);
+  background: rgba(242, 235, 224, 0.97);
+  border: 1px solid rgba(26, 26, 22, 0.18);
+  border-bottom-color: rgba(26, 26, 22, 0.28);
+  border-radius: 0;
+  cursor: pointer;
+  /* The bottom shadow is the raised keycap edge */
+  box-shadow:
+    0 3px 0 rgba(26, 26, 22, 0.16),
+    0 1px 3px rgba(26, 26, 22, 0.06);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease;
+  transform: translateY(0);
+  user-select: none;
 }
 
+.enterBtn:hover {
+  background: #fff;
+  color: rgba(26, 26, 22, 0.85);
+  box-shadow:
+    0 4px 0 rgba(26, 26, 22, 0.18),
+    0 1px 4px rgba(26, 26, 22, 0.08);
+}
+
+.enterBtnPressed {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 rgba(26, 26, 22, 0.16);
+  background: rgba(232, 226, 215, 0.97);
+}

@@ -2,7 +2,8 @@ import { Link } from 'react-router-dom';
 import { UK_MEDIAN_MONTHLY_TAKEHOME, FTSE_CEO_HOURLY } from '../experiences/budgetData';
 
 const SERIF = "'Instrument Serif', 'Cormorant Garamond', serif";
-const SANS  = "system-ui, -apple-system, sans-serif";
+const SANS  = "'Manrope', system-ui, sans-serif";
+const BODY  = "'Lato', system-ui, sans-serif";
 
 export default function WealthInequality() {
   // CEO earns the median's monthly take-home in roughly this many hours.
@@ -10,12 +11,12 @@ export default function WealthInequality() {
 
   return (
     <div style={{
-      minHeight: '100vh',
+      minHeight: '100dvh',
       background: '#f2ebe0',
       color: '#1a1a16',
       fontFamily: SANS,
       position: 'relative',
-      padding: 'clamp(3rem, 6vw, 5rem) clamp(1.4rem, 6vw, 4rem) 4rem',
+      padding: 'clamp(3rem, 6vw, 5rem) clamp(1.4rem, 6vw, 4rem) 5rem',
     }}>
       {/* Grain */}
       <div style={{
@@ -56,7 +57,7 @@ export default function WealthInequality() {
           </h1>
 
           <p style={{
-            margin: 0, fontSize: '0.95rem', lineHeight: 1.7,
+            fontFamily: BODY, margin: 0, fontSize: '0.95rem', lineHeight: 1.7,
             color: 'rgba(26,26,22,0.55)', maxWidth: 540,
           }}>
             The slow climb you just saw isn't a personal failure. It's the shape of the system. The gap between what most people earn and what the people at the top earn is now wider than at any point in modern memory.
@@ -98,7 +99,7 @@ export default function WealthInequality() {
             More to come.
           </h2>
           <p style={{ margin: 0, fontSize: '0.92rem', lineHeight: 1.7, color: 'rgba(26,26,22,0.55)', maxWidth: 540 }}>
-            This page is a placeholder for the rest of the story — the share of wealth at the top, how that share has grown, and what it actually buys. Plug those in next.
+            This page is a placeholder for the rest of the story: the share of wealth at the top, how it's grown, and what it actually buys.
           </p>
         </section>
 
@@ -120,8 +121,15 @@ export default function WealthInequality() {
 function Stat({ label, value, suffix }: { label: string; value: string; suffix: string }) {
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', gap: '0.4rem',
-      padding: '1.2rem 1.1rem',
+      // Outer grid stretches sibling cards to equal height (when in the same row).
+      // Inner `1fr` value row absorbs the extra height and `align-self: end` parks the
+      // number against the suffix — so numbers baseline-align across desktop cards
+      // without forcing extra whitespace on mobile (where each card stands alone).
+      display: 'grid',
+      gridTemplateRows: 'auto 1fr auto',
+      height: '100%',
+      rowGap: '0.7rem',
+      padding: '1.3rem 1.2rem 1.2rem',
       background: 'rgba(255,255,255,0.4)',
       border: '1px solid rgba(26,26,22,0.1)',
       borderRadius: 10,
@@ -130,14 +138,20 @@ function Stat({ label, value, suffix }: { label: string; value: string; suffix: 
         fontFamily: SANS, fontSize: '0.6rem',
         letterSpacing: '0.1em', textTransform: 'uppercase',
         color: 'rgba(26,26,22,0.45)',
+        lineHeight: 1.4,
       }}>{label}</span>
       <span style={{
         fontFamily: SERIF, fontStyle: 'italic', fontWeight: 400,
         fontSize: 'clamp(1.8rem, 3vw, 2.4rem)',
-        lineHeight: 1.05,
+        lineHeight: 1,
         fontVariantNumeric: 'tabular-nums',
+        alignSelf: 'end',
       }}>{value}</span>
-      <span style={{ fontSize: '0.72rem', color: 'rgba(26,26,22,0.45)' }}>{suffix}</span>
+      <span style={{
+        fontFamily: SANS, fontSize: '0.72rem',
+        color: 'rgba(26,26,22,0.45)',
+        lineHeight: 1.4,
+      }}>{suffix}</span>
     </div>
   );
 }

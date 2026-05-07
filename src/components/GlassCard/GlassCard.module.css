@@ -1,0 +1,50 @@
+.card {
+  position: relative;
+
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
+
+  background: rgba(242, 235, 224, 0.72);
+  border-radius: 20px;
+
+  border: 1px solid rgba(26, 26, 22, 0.10);
+  box-shadow:
+    0 1px 0 0 rgba(255, 255, 255, 0.60) inset,
+    0 2px 12px 0 rgba(26, 26, 22, 0.08),
+    0 1px 3px 0 rgba(26, 26, 22, 0.06);
+
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.30) 0%,
+    rgba(255, 255, 255, 0.08) 40%,
+    rgba(255, 255, 255, 0.00) 70%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.card::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    circle 220px at var(--sheen-x, -400px) var(--sheen-y, -400px),
+    rgba(255, 255, 255, 0.40) 0%,
+    rgba(255, 255, 255, 0.08) 40%,
+    transparent 70%
+  );
+  opacity: var(--sheen, 0);
+  pointer-events: none;
+  z-index: 0;
+  transition: opacity 0.4s ease;
+}

@@ -1,13 +1,13 @@
-import { memo, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { useGLTF } from '@react-three/drei';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import Lenis from 'lenis';
+import { AllHologramScenes, HologramTimeAnimator, MouseInfluenceTracker } from './HologramObjects';
 import {
   buildExpenses,
-  PLACEHOLDER_MODEL,
   DEFAULTS,
   RENT_RANGE,
   UTILITIES_RANGE,
@@ -22,17 +22,23 @@ import {
 } from './budgetData';
 import type { StudentLoanPlan, CouncilBand } from './ukTax';
 import { BudgetProgressBar } from '../components/BudgetProgressBar';
+import { GridBackground } from '../components/GridBackground';
+import expStyles from './expenditure.module.css';
 
 gsap.registerPlugin(ScrollTrigger);
 
 type Mode = 'average' | 'custom';
 
 const SERIF = "'Instrument Serif', 'Cormorant Garamond', serif";
-const SANS  = "system-ui, -apple-system, sans-serif";
+const SANS  = "'Manrope', system-ui, sans-serif";
+const BODY  = "'Lato', system-ui, sans-serif";
 
 /* ── Responsive hook ─────────────────────────────── */
 
-function useIsMobile(breakpoint = 720) {
+// 900px catches portrait tablets (768) and small laptops in split-screen.
+// Below this width the side-by-side text+model layout collides with the
+// centred 3D model, so we switch to the stacked mobile layout instead.
+function useIsMobile(breakpoint = 900) {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= breakpoint
   );
@@ -46,13 +52,6 @@ function useIsMobile(breakpoint = 720) {
 }
 
 /* ── 3D helpers ──────────────────────────────────── */
-
-function SectionModel({ url }: { url: string }) {
-  const { scene } = useGLTF(url);
-  return <primitive object={scene} />;
-}
-
-useGLTF.preload(PLACEHOLDER_MODEL);
 
 /* ── Drifting particle field (atmosphere) ─────────
  *
@@ -80,7 +79,8 @@ function makeSoftDotTexture(): THREE.CanvasTexture {
 }
 
 const PARTICLE_VOLUME: [number, number] = [26, 120];
-const PARTICLE_COUNT = 700;
+const PARTICLE_COUNT_DESKTOP = 700;
+const PARTICLE_COUNT_MOBILE  = 280;
 // Camera fov 50 at z=10 → world height visible = 2*10*tan(25°) ≈ 9.33
 const VISIBLE_WORLD_HEIGHT = 2 * 10 * Math.tan((50 / 2) * Math.PI / 180);
 
@@ -91,10 +91,16 @@ const PARTICLE_VERTEX = /* glsl */`
   uniform float uSize;
   varying float vAlpha;
   void main() {
+    // Tiny in-place sway baked into the vertex shader so the field feels alive
+    // without paying for a 700-element JS loop + buffer re-upload every frame.
+    vec3 pos = position;
+    pos.x += sin(uTime * 0.40 + aPhase)        * 0.08;
+    pos.y += cos(uTime * 0.35 + aPhase * 1.3)  * 0.08;
+
     // Slow per-particle fade in/out — some particles also stay brighter (aIntensity).
     float pulse = 0.45 + 0.55 * sin(uTime * 0.45 + aPhase);
     vAlpha = aIntensity * pulse;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
     gl_PointSize = uSize;
   }
 `;
@@ -112,22 +118,21 @@ const PARTICLE_FRAGMENT = /* glsl */`
   }
 `;
 
-function ParticleLayer() {
+function ParticleLayer({ count }: { count: number }) {
   const groupRef = useRef<THREE.Group>(null);
-  const pointsRef = useRef<THREE.Points>(null);
   const texture = useMemo(makeSoftDotTexture, []);
 
   // Jittered grid → orderly but not mechanical. Phases + intensities give variety.
   const { positions, phases, intensities } = useMemo(() => {
     const [vx, vy] = PARTICLE_VOLUME;
-    const cols = Math.max(1, Math.round(Math.sqrt(PARTICLE_COUNT * (vx / vy))));
-    const rows = Math.ceil(PARTICLE_COUNT / cols);
+    const cols = Math.max(1, Math.round(Math.sqrt(count * (vx / vy))));
+    const rows = Math.ceil(count / cols);
     const cellW = vx / cols;
     const cellH = vy / rows;
-    const pos = new Float32Array(PARTICLE_COUNT * 3);
-    const ph  = new Float32Array(PARTICLE_COUNT);
-    const it  = new Float32Array(PARTICLE_COUNT);
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const pos = new Float32Array(count * 3);
+    const ph  = new Float32Array(count);
+    const it  = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
       const cx = i % cols;
       const cy = Math.floor(i / cols);
       pos[i * 3]     = -vx / 2 + (cx + 0.5 + (Math.random() - 0.5) * 0.6) * cellW;
@@ -138,16 +143,14 @@ function ParticleLayer() {
       it[i] = Math.random() < 0.2 ? 0.85 + Math.random() * 0.15 : 0.35 + Math.random() * 0.35;
     }
     return { positions: pos, phases: ph, intensities: it };
-  }, []);
-
-  const basePositions = useMemo(() => positions.slice(), [positions]);
+  }, [count]);
 
   const uniforms = useMemo(() => ({
     uTime:    { value: 0 },
     uTex:     { value: texture },
-    uColor:   { value: new THREE.Color('#1a1a16') },
-    uOpacity: { value: 0.85 },
-    uSize:    { value: 3.6 },
+    uColor:   { value: new THREE.Color('#ffffff') },
+    uOpacity: { value: 0.72 },
+    uSize:    { value: 4.0 },
   }), [texture]);
 
   useFrame((state) => {
@@ -155,26 +158,14 @@ function ParticleLayer() {
       const px2world = VISIBLE_WORLD_HEIGHT / window.innerHeight;
       groupRef.current.position.y = window.scrollY * px2world * 0.85;
     }
-
     uniforms.uTime.value = state.clock.elapsedTime;
-
-    // Tiny in-place sway so the field feels alive.
-    if (!pointsRef.current) return;
-    const t = state.clock.elapsedTime;
-    const attr = pointsRef.current.geometry.attributes.position as THREE.BufferAttribute;
-    const arr = attr.array as Float32Array;
-    const amp = 0.08;
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const p = phases[i];
-      arr[i * 3]     = basePositions[i * 3]     + Math.sin(t * 0.4 + p) * amp;
-      arr[i * 3 + 1] = basePositions[i * 3 + 1] + Math.cos(t * 0.35 + p * 1.3) * amp;
-    }
-    attr.needsUpdate = true;
+    // Sway is now driven entirely by the vertex shader using uTime + aPhase —
+    // no per-frame JS loop, no buffer re-upload.
   });
 
   return (
     <group ref={groupRef}>
-      <points ref={pointsRef}>
+      <points>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position"   args={[positions,   3]} />
           <bufferAttribute attach="attributes-aPhase"     args={[phases,      1]} />
@@ -192,7 +183,8 @@ function ParticleLayer() {
   );
 }
 
-const ParticleBackdrop = memo(function ParticleBackdrop() {
+const ParticleBackdrop = memo(function ParticleBackdrop({ isMobile }: { isMobile: boolean }) {
+  const count = isMobile ? PARTICLE_COUNT_MOBILE : PARTICLE_COUNT_DESKTOP;
   return (
     <div
       aria-hidden
@@ -203,14 +195,18 @@ const ParticleBackdrop = memo(function ParticleBackdrop() {
         pointerEvents: 'none',
       }}
     >
-      <Canvas camera={{ position: [0, 0, 10], fov: 50 }} gl={{ alpha: true, antialias: true }}>
-        <ParticleLayer />
+      <Canvas
+        camera={{ position: [0, 0, 10], fov: 50 }}
+        dpr={[1, isMobile ? 1.25 : 1.5]}
+        gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
+      >
+        <ParticleLayer count={count} />
       </Canvas>
     </div>
   );
 });
 
-function CameraAnimator({ sectionCount: _sectionCount }: { sectionCount: number }) {
+function CameraAnimator({ totalY }: { totalY: number }) {
   const { camera } = useThree();
 
   useEffect(() => {
@@ -219,17 +215,17 @@ function CameraAnimator({ sectionCount: _sectionCount }: { sectionCount: number 
         trigger: '#main-scroll-container',
         start: 'top top',
         end: 'bottom bottom',
-        scrub: 1.2,
+        scrub: true, // Lenis owns the easing; no additional lag needed here
       },
     });
 
-    tl.to(camera.position, { y: -20, ease: 'none' });
+    tl.to(camera.position, { y: -totalY, ease: 'none' });
 
     return () => {
       (tl.scrollTrigger as ScrollTrigger | undefined)?.kill();
       tl.kill();
     };
-  }, [camera]);
+  }, [camera, totalY]);
 
   return null;
 }
@@ -245,102 +241,128 @@ const GHOST_LABELS: { text: string; top: string; left?: string; right?: string; 
   { text: 'CH-0420 / FLOW',           top: '60%', right: '5%', delay: 3,   dur: 14 },
 ];
 
-const BackgroundAtmosphere = memo(function BackgroundAtmosphere() {
-  const blobARef = useRef<HTMLDivElement>(null);
-  const blobBRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let raf = 0;
-    const update = () => {
-      const y = window.scrollY;
-      if (blobARef.current) blobARef.current.style.transform = `translateY(${-y * 0.18}px)`;
-      if (blobBRef.current) blobBRef.current.style.transform = `translateY(${-y * 0.32}px)`;
-      raf = 0;
-    };
-    const onScroll = () => { if (!raf) raf = requestAnimationFrame(update); };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    update();
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
-
+const BackgroundAtmosphere = memo(function BackgroundAtmosphere({ isMobile }: { isMobile: boolean }) {
+  // Full-screen 70-90px CSS blur on phones is the single biggest GPU cost on
+  // this page. Halving it on mobile is invisible to the eye (the orbs stay
+  // soft and luminous) but cuts the per-frame composite cost by ~60%.
+  const blurA = isMobile ? 36 : 72;
+  const blurB = isMobile ? 44 : 88;
+  const blurC = isMobile ? 30 : 60;
+  const blurFlareA = isMobile ? 24 : 42;
+  const blurFlareB = isMobile ? 22 : 36;
+  const blurFlareC = isMobile ? 28 : 50;
   return (
     <>
-      {/* Spherical vignette — deepens the edges so the page feels like a chamber */}
-      <div
-        aria-hidden
-        style={{
-          position: 'fixed',
-          inset: 0,
-          pointerEvents: 'none',
-          zIndex: 0,
-          background:
-            'radial-gradient(ellipse 82% 68% at 50% 50%, transparent 55%, rgba(28,38,32,0.14) 100%)',
-        }}
-      />
+      <style>{`
+        @keyframes ghostFade { 0%,100% { opacity:0.03 } 50% { opacity:0.16 } }
 
-      {/* Soft atmospheric blobs — organic depth, parallax with scroll */}
-      <div
-        ref={blobARef}
-        aria-hidden
-        style={{
-          position: 'fixed',
-          top: '14%', left: '10%',
-          width: '38vw', height: '38vw',
-          maxWidth: 520, maxHeight: 520,
-          background: 'radial-gradient(circle, rgba(28,40,32,0.08), transparent 65%)',
-          filter: 'blur(60px)',
-          pointerEvents: 'none',
-          zIndex: 0,
-          willChange: 'transform',
-        }}
-      />
-      <div
-        ref={blobBRef}
-        aria-hidden
-        style={{
-          position: 'fixed',
-          bottom: '10%', right: '8%',
-          width: '34vw', height: '34vw',
-          maxWidth: 460, maxHeight: 460,
-          background: 'radial-gradient(circle, rgba(240,242,232,0.18), transparent 65%)',
-          filter: 'blur(70px)',
-          pointerEvents: 'none',
-          zIndex: 0,
-          willChange: 'transform',
-        }}
-      />
+        @keyframes cloudA {
+          0%,100% { transform:translate(0,0) scale(1); }
+          20%  { transform:translate(6vw,-10vh) scale(1.08); }
+          50%  { transform:translate(9vw,5vh) scale(0.94); }
+          78%  { transform:translate(-6vw,8vh) scale(1.06); }
+        }
+        @keyframes cloudB {
+          0%,100% { transform:translate(0,0) scale(1); }
+          28%  { transform:translate(-8vw,10vh) scale(1.12); }
+          62%  { transform:translate(7vw,-7vh) scale(0.92); }
+        }
+        @keyframes cloudC {
+          0%,100% { transform:translate(0,0) scale(1); }
+          35%  { transform:translate(5vw,-12vh) scale(1.10); }
+          70%  { transform:translate(-7vw,6vh) scale(0.90); }
+        }
 
-      {/* Light flares — long, soft highlights suggesting curvature */}
-      <div
-        aria-hidden
-        style={{
-          position: 'fixed',
-          top: '18%', left: '-15%', right: '-15%', height: '14vh',
-          background: 'linear-gradient(180deg, transparent, rgba(255,253,245,0.42), transparent)',
-          filter: 'blur(48px)',
-          transform: 'rotate(-7deg)',
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
-      <div
-        aria-hidden
-        style={{
-          position: 'fixed',
-          bottom: '14%', left: '-20%', right: '-10%', height: '11vh',
-          background: 'linear-gradient(180deg, transparent, rgba(255,250,235,0.28), transparent)',
-          filter: 'blur(56px)',
-          transform: 'rotate(5deg)',
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
+        /* Fast flares — shorter cycles for constant perceived motion */
+        @keyframes flareA {
+          0%,100% { transform:translateX(0) scaleX(1); opacity:0.55; }
+          45%     { transform:translateX(14vw) scaleX(1.25); opacity:0.90; }
+          75%     { transform:translateX(-8vw) scaleX(0.85); opacity:0.40; }
+        }
+        @keyframes flareB {
+          0%,100% { transform:translate(0,0) rotate(0deg); opacity:0.45; }
+          40%     { transform:translate(-12vw, 10vh) rotate(-8deg); opacity:0.80; }
+          72%     { transform:translate(8vw, -6vh) rotate(5deg); opacity:0.35; }
+        }
+        @keyframes flareC {
+          0%,100% { transform:translateY(0) scaleY(1); opacity:0.50; }
+          50%     { transform:translateY(-12vh) scaleY(1.3); opacity:0.85; }
+        }
 
-      {/* Ghost labels — pulsing technical artifacts in the periphery */}
-      <style>{`@keyframes ghostFade { 0%,100% { opacity: 0.04 } 50% { opacity: 0.22 } }`}</style>
+        /* Stop drifting blur animations for users with reduced-motion preference.
+         * The clouds and flares stay visible — they just hold position. */
+        @media (prefers-reduced-motion: reduce) {
+          [data-bg-anim] { animation: none !important; }
+        }
+      `}</style>
+
+      {/* Edge vignette */}
+      <div aria-hidden style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
+        background: 'radial-gradient(ellipse 80% 65% at 50% 50%, transparent 45%, rgba(50,58,72,0.32) 100%)',
+      }} />
+
+      {/* Cloud A — large primary, top-left drift */}
+      <div aria-hidden data-bg-anim="" style={{
+        position: 'fixed', top: '-18%', left: '-5%',
+        width: '75vw', height: '75vw', maxWidth: 1050, maxHeight: 1050,
+        background: 'radial-gradient(circle, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.38) 32%, transparent 62%)',
+        filter: `blur(${blurA}px)`,
+        pointerEvents: 'none', zIndex: 0, willChange: 'transform',
+        animation: 'cloudA 22s ease-in-out infinite',
+      }} />
+
+      {/* Cloud B — bottom-right drift */}
+      <div aria-hidden data-bg-anim="" style={{
+        position: 'fixed', bottom: '-22%', right: '-8%',
+        width: '65vw', height: '65vw', maxWidth: 900, maxHeight: 900,
+        background: 'radial-gradient(circle, rgba(255,255,255,0.68) 0%, rgba(235,238,244,0.32) 36%, transparent 62%)',
+        filter: `blur(${blurB}px)`,
+        pointerEvents: 'none', zIndex: 0, willChange: 'transform',
+        animation: 'cloudB 28s ease-in-out infinite 4s',
+      }} />
+
+      {/* Cloud C — center secondary */}
+      <div aria-hidden data-bg-anim="" style={{
+        position: 'fixed', top: '22%', right: '5%',
+        width: '45vw', height: '45vw', maxWidth: 620, maxHeight: 620,
+        background: 'radial-gradient(circle, rgba(255,255,255,0.58) 0%, rgba(220,225,234,0.24) 40%, transparent 66%)',
+        filter: `blur(${blurC}px)`,
+        pointerEvents: 'none', zIndex: 0, willChange: 'transform',
+        animation: 'cloudC 18s ease-in-out infinite 8s',
+      }} />
+
+      {/* Flare A — horizontal sweep across middle, 11s */}
+      <div aria-hidden data-bg-anim="" style={{
+        position: 'fixed', top: '30%', left: '-10%',
+        width: '55vw', height: '28vh',
+        background: 'radial-gradient(ellipse 100% 80% at 40% 50%, rgba(255,255,255,0.55) 0%, rgba(230,234,240,0.22) 50%, transparent 72%)',
+        filter: `blur(${blurFlareA}px)`,
+        pointerEvents: 'none', zIndex: 0, willChange: 'transform',
+        animation: 'flareA 11s ease-in-out infinite 1s',
+      }} />
+
+      {/* Flare B — diagonal corner-to-corner, 9s */}
+      <div aria-hidden data-bg-anim="" style={{
+        position: 'fixed', bottom: '10%', left: '15%',
+        width: '42vw', height: '22vh',
+        background: 'radial-gradient(ellipse 90% 70% at 50% 60%, rgba(210,218,230,0.60) 0%, rgba(200,210,225,0.20) 55%, transparent 75%)',
+        filter: `blur(${blurFlareB}px)`,
+        pointerEvents: 'none', zIndex: 0, willChange: 'transform',
+        animation: 'flareB 9s ease-in-out infinite 2.5s',
+      }} />
+
+      {/* Flare C — vertical pulse from top, 13s */}
+      <div aria-hidden data-bg-anim="" style={{
+        position: 'fixed', top: '-5%', left: '35%',
+        width: '30vw', height: '40vh',
+        background: 'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(255,255,255,0.50) 0%, transparent 68%)',
+        filter: `blur(${blurFlareC}px)`,
+        pointerEvents: 'none', zIndex: 0, willChange: 'transform',
+        animation: 'flareC 13s ease-in-out infinite 5s',
+      }} />
+
+      {/* Ghost labels */}
       {GHOST_LABELS.map((l) => (
         <div
           key={l.text}
@@ -352,11 +374,11 @@ const BackgroundAtmosphere = memo(function BackgroundAtmosphere() {
             fontSize: 10,
             letterSpacing: '0.22em',
             textTransform: 'uppercase',
-            color: '#1a1a16',
-            filter: 'blur(0.6px)',
+            color: '#3a4050',
+            filter: 'blur(0.4px)',
             pointerEvents: 'none',
             zIndex: 0,
-            opacity: 0.04,
+            opacity: 0.03,
             animation: `ghostFade ${l.dur}s ease-in-out ${l.delay}s infinite`,
           }}
         >
@@ -399,9 +421,9 @@ function ambientLayerStyle(isMobile: boolean): CSSProperties {
     // which forces full-screen rasterization on every composite (the jitter source).
     color: 'transparent',
     textShadow: [
-      '0 0 18px rgba(26,26,22,0.05)',
-      '0 0 36px rgba(26,26,22,0.05)',
-      '0 0 72px rgba(26,26,22,0.04)',
+      '0 0 18px rgba(255,255,255,0.18)',
+      '0 0 36px rgba(255,255,255,0.12)',
+      '0 0 90px rgba(255,255,255,0.08)',
     ].join(', '),
     letterSpacing: '-0.04em',
     lineHeight: 1,
@@ -450,18 +472,20 @@ function AmbientWord({ word, isMobile }: { word: string; isMobile: boolean }) {
       showA.current = !showA.current;
 
       requestAnimationFrame(() => {
+        // Incoming fades in slightly slower than outgoing fades out, so both
+        // words are visible together for ~0.7s — a pronounced cross-fade.
         if (incomingRef.current) {
           gsap.fromTo(
             incomingRef.current,
             { opacity: 0 },
-            { opacity: 1, duration: 0.9, ease: 'power2.out', overwrite: true }
+            { opacity: 1, duration: 1.5, ease: 'power3.inOut', overwrite: true }
           );
         }
         if (outgoingRef.current) {
-          gsap.to(outgoingRef.current, { opacity: 0, duration: 0.9, ease: 'power2.out', overwrite: true });
+          gsap.to(outgoingRef.current, { opacity: 0, duration: 1.3, ease: 'power3.inOut', overwrite: true });
         }
       });
-    }, 140);
+    }, 110);
 
     return () => window.clearTimeout(id);
   }, [word]);
@@ -476,46 +500,68 @@ function AmbientWord({ word, isMobile }: { word: string; isMobile: boolean }) {
   );
 }
 
+const sectionCardStyle: CSSProperties = {
+  display: 'inline-flex',
+  flexDirection: 'column',
+  alignSelf: 'flex-start',
+  maxWidth: '400px',
+  padding: '1.8rem 2rem 2rem',
+};
+
 /* ── Shared text styles ──────────────────────────── */
 
 const labelStyle: React.CSSProperties = {
   display: 'block',
   fontFamily: SANS,
-  fontSize: '0.6rem',
+  fontSize: '0.75rem',
   letterSpacing: '0.1em',
   textTransform: 'uppercase',
   color: 'rgba(26,26,22,0.38)',
-  marginBottom: '0.8rem',
+  marginBottom: '0.45rem',
 };
 
 const headingStyle: React.CSSProperties = {
   fontFamily: SERIF,
   fontStyle: 'italic',
   fontWeight: 400,
-  margin: '0 0 1rem',
-  fontSize: 'clamp(2.4rem, 4.5vw, 3.8rem)',
+  margin: '0 0 0.3rem',
+  fontSize: 'clamp(3rem, 5.5vw, 5rem)',
   lineHeight: 1.04,
   color: '#1a1a16',
   letterSpacing: '-0.005em',
 };
 
 const bodyStyle: React.CSSProperties = {
-  fontFamily: SANS,
-  margin: '0 0 0.5rem',
-  fontSize: '0.88rem',
-  lineHeight: 1.72,
+  fontFamily: BODY,
+  margin: '0 0 0.15rem',
+  fontSize: '1.05rem',
+  lineHeight: 1.6,
   color: 'rgba(26,26,22,0.5)',
   maxWidth: '340px',
 };
 
+const numberStyle: React.CSSProperties = {
+  fontFamily: SERIF,
+  fontStyle: 'italic',
+  fontWeight: 700,
+  fontSize: 'clamp(3.5rem, 6.5vw, 6rem)',
+  lineHeight: 1.04,
+  letterSpacing: '-0.005em',
+  fontVariantNumeric: 'tabular-nums',
+  display: 'inline-block',
+};
+
 function makeSectionStyle(isMobile: boolean): CSSProperties {
   return {
-    height: '100vh',
+    height: '100svh',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'center',
-    paddingLeft: isMobile ? '6vw' : '10vw',
-    paddingRight: isMobile ? '80px' : 0,
+    // Mobile: text occupies the top third, leaving the model visible below.
+    // Desktop: text vertically centered on left, model fills the right.
+    justifyContent: isMobile ? 'flex-start' : 'center',
+    paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 88px)' : 0,
+    paddingLeft: isMobile ? '6vw' : '6vw',
+    paddingRight: isMobile ? '6vw' : 0,
     maxWidth: isMobile ? '100vw' : '52vw',
   };
 }
@@ -528,8 +574,21 @@ function Slider({
   value: number; min: number; max: number; step: number;
   onChange: (v: number) => void; suffix?: string;
 }) {
+  const fillPct = `${Math.round(((value - min) / (max - min)) * 100)}%`;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 340, marginTop: '0.9rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 340, marginTop: '0.9rem' }}>
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        fontFamily: SANS,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        <span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'rgba(26,26,22,0.75)' }}>
+          £{value.toLocaleString()}{suffix}
+        </span>
+        <span style={{ fontSize: '0.6rem', color: 'rgba(26,26,22,0.35)' }}>
+          £{min.toLocaleString()} – £{max.toLocaleString()}{suffix}
+        </span>
+      </div>
       <input
         type="range"
         min={min}
@@ -537,18 +596,9 @@ function Slider({
         step={step}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        style={{ accentColor: '#1c4d2e', width: '100%' }}
+        className={expStyles.slider}
+        style={{ '--fill': fillPct } as React.CSSProperties}
       />
-      <div style={{
-        display: 'flex', justifyContent: 'space-between',
-        fontFamily: SANS,
-        fontSize: '0.62rem',
-        color: 'rgba(26,26,22,0.4)',
-        fontVariantNumeric: 'tabular-nums',
-      }}>
-        <span>£{min.toLocaleString()}{suffix}</span>
-        <span>£{max.toLocaleString()}{suffix}</span>
-      </div>
     </div>
   );
 }
@@ -564,14 +614,13 @@ function Segmented<T extends string | number>({
   return (
     <div style={{
       display: 'inline-flex',
-      flexWrap: 'wrap',
+      alignSelf: 'flex-start',
       gap: 4,
       background: 'rgba(26,26,22,0.04)',
       border: '1px solid rgba(26,26,22,0.1)',
       borderRadius: 8,
       padding: 3,
       marginTop: '0.9rem',
-      maxWidth: 340,
     }}>
       {options.map((opt) => {
         const active = opt === value;
@@ -652,32 +701,59 @@ function ExpenseSection({
         return <Segmented<CouncilBand>
           value={overrides.councilBand ?? DEFAULTS.councilBand}
           options={COUNCIL_BAND_OPTIONS}
-          format={(v) => `Band ${v}`}
+          format={(v) => v}
           onChange={(v) => onOverride({ councilBand: v })} />;
       default:
         return null;
     }
   })();
 
+  const description =
+    mode === 'custom' && expense.descriptionCustom
+      ? expense.descriptionCustom
+      : expense.description;
+
   return (
     <div id={expense.id} style={makeSectionStyle(isMobile)}>
-      <span style={labelStyle}>{expense.group}</span>
-      <h1 style={headingStyle}>{expense.label}</h1>
-      <p style={bodyStyle}>{expense.description}</p>
-      <span style={{
-        fontFamily: SANS,
-        fontSize: '0.75rem',
-        color: '#8b2216',
-        display: 'inline-block',
-        marginTop: '0.4rem',
-        fontVariantNumeric: 'tabular-nums',
-      }}>
-        − £{expense.amount.toLocaleString()} / month
-        {expense.derived && (
-          <span style={{ color: 'rgba(26,26,22,0.35)', marginLeft: 8 }}>(auto)</span>
-        )}
-      </span>
-      {control}
+      <div data-section-card style={sectionCardStyle}>
+        <h1 style={{ ...headingStyle, margin: '0 0 0.3rem' }}>{expense.label}</h1>
+        <p style={bodyStyle}>{description}</p>
+        <span style={{
+          ...numberStyle,
+          color: '#8b2216',
+          marginTop: '0.25rem',
+          whiteSpace: 'nowrap',
+        }}>
+          − £{expense.amount.toLocaleString()}
+          <span style={{
+            fontFamily: BODY,
+            fontStyle: 'normal',
+            fontWeight: 400,
+            fontSize: '0.95rem',
+            letterSpacing: 0,
+            color: 'rgba(26,26,22,0.45)',
+            marginLeft: 10,
+            verticalAlign: 'middle',
+            whiteSpace: 'nowrap',
+          }}>
+            /month
+          </span>
+          {expense.derived && (
+            <span style={{
+              fontFamily: SANS,
+              fontStyle: 'normal',
+              fontWeight: 400,
+              fontSize: '0.7rem',
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'rgba(26,26,22,0.35)',
+              marginLeft: 10,
+              verticalAlign: 'middle',
+            }}>(auto)</span>
+          )}
+        </span>
+        {control}
+      </div>
     </div>
   );
 }
@@ -699,16 +775,220 @@ function ModeToggle({ mode, onChange }: { mode: Mode; onChange: (m: Mode) => voi
 
   return (
     <div style={{
-      position: 'fixed', top: 24, right: 24, zIndex: 200,
       display: 'inline-flex',
-      background: 'rgba(242,235,224,0.85)',
-      border: '1px solid rgba(26,26,22,0.13)',
+      alignSelf: 'flex-start',
+      background: 'rgba(26,26,22,0.06)',
+      border: '1px solid rgba(26,26,22,0.12)',
       borderRadius: 999,
       padding: 3,
     }}>
       <button type="button" style={btn(mode === 'average')} onClick={() => onChange('average')}>Average</button>
       <button type="button" style={btn(mode === 'custom')}  onClick={() => onChange('custom')}>Custom</button>
     </div>
+  );
+}
+
+/* ── Scroll hint ─────────────────────────────────── */
+
+function ScrollHint() {
+  const [scrolling, setScrolling] = useState(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setScrolling(true);
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      idleTimer.current = setTimeout(() => setScrolling(false), 800);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+    };
+  }, []);
+
+  return (
+    <>
+      <style>{`
+        @keyframes _arrowBounce {
+          0%, 100% { transform: translateY(0);   opacity: 1;   }
+          50%       { transform: translateY(5px); opacity: 0.5; }
+        }
+      `}</style>
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          bottom: 56, left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 200,
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: '0.3rem',
+          color: 'rgba(26,26,22,0.65)',
+          fontFamily: SANS,
+          fontSize: '0.6rem',
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          pointerEvents: 'none',
+          padding: '0.4rem 0.8rem',
+          opacity: scrolling ? 0 : 1,
+          transition: 'opacity 0.45s ease',
+          textShadow: '0 1px 6px rgba(255,255,255,0.55)',
+        }}
+      >
+        <span style={{ opacity: 0.8 }}>Scroll</span>
+        <span style={{
+          fontSize: '1rem',
+          animation: scrolling ? 'none' : '_arrowBounce 1.5s ease-in-out infinite',
+          display: 'block',
+        }}>↓</span>
+      </div>
+    </>
+  );
+}
+
+/* ── Back-to-top + undo ──────────────────────────── */
+
+const UNDO_MS = 4500;
+
+function BackToTopButton({ lenisRef }: { lenisRef: React.RefObject<Lenis | null> }) {
+  const [visible,  setVisible]  = useState(false);
+  const [showUndo, setShowUndo] = useState(false);
+  const savedY  = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Show after scrolling past 60 % of the first viewport
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > window.innerHeight * 0.6);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Auto-dismiss undo if the user scrolls away from top themselves
+  useEffect(() => {
+    if (!showUndo) return;
+    const onScroll = () => {
+      if (window.scrollY > 100) dismiss();
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showUndo]);
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  function dismiss() {
+    setShowUndo(false);
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }
+
+  const goTop = () => {
+    savedY.current = window.scrollY;
+    setShowUndo(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    lenisRef.current?.scrollTo(0, {
+      duration: 1.1,
+      easing: (t: number) => 1 - Math.pow(1 - t, 3),
+    });
+    timerRef.current = setTimeout(dismiss, UNDO_MS);
+  };
+
+  const undo = () => {
+    lenisRef.current?.scrollTo(savedY.current, { duration: 1.0 });
+    dismiss();
+  };
+
+  const btnBase: React.CSSProperties = {
+    fontFamily: SANS,
+    fontSize: '0.72rem',
+    letterSpacing: '0.05em',
+    padding: '0.38rem 0.85rem',
+    borderRadius: 999,
+    cursor: 'pointer',
+    display: 'block',
+    whiteSpace: 'nowrap',
+  };
+
+  return (
+    <>
+      <style>{`
+        @keyframes _drainBar {
+          from { transform: scaleX(1); }
+          to   { transform: scaleX(0); }
+        }
+      `}</style>
+
+      <div style={{
+        position: 'fixed',
+        // Sit 12px above the SoundToggle (bottom:24px + ~36px tall + 12px gap)
+        bottom: '4.8rem',
+        left: '1.5rem',
+        zIndex: 200,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: '0.45rem',
+      }}>
+
+        {/* Undo chip — dark, inverted, appears immediately after going to top */}
+        <div style={{
+          opacity: showUndo ? 1 : 0,
+          transform: showUndo ? 'translateY(0) scale(1)' : 'translateY(5px) scale(0.96)',
+          transition: 'opacity 0.18s ease, transform 0.18s ease',
+          pointerEvents: showUndo ? 'auto' : 'none',
+        }}>
+          <button
+            onClick={undo}
+            style={{
+              ...btnBase,
+              paddingBottom: '0.52rem',
+              border: '1px solid rgba(26,26,22,0.35)',
+              background: 'rgba(26,26,22,0.88)',
+              color: 'rgba(242,235,224,0.9)',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            ↩ Go back
+            {/* Countdown drain bar */}
+            {showUndo && (
+              <span style={{
+                position: 'absolute',
+                bottom: 0, left: 0,
+                height: 2,
+                width: '100%',
+                background: 'rgba(242,235,224,0.28)',
+                transformOrigin: 'left center',
+                animation: `_drainBar ${UNDO_MS}ms linear forwards`,
+              }} />
+            )}
+          </button>
+        </div>
+
+        {/* Back-to-top pill — hides while undo is showing (already at top) */}
+        <div style={{
+          opacity: visible && !showUndo ? 1 : 0,
+          transform: visible ? 'translateY(0)' : 'translateY(6px)',
+          transition: 'opacity 0.28s ease, transform 0.28s ease',
+          pointerEvents: visible && !showUndo ? 'auto' : 'none',
+        }}>
+          <button
+            onClick={goTop}
+            style={{
+              ...btnBase,
+              fontSize: '0.78rem',
+              padding: '0.45rem 1rem',
+              border: '1px solid rgba(26,26,22,0.4)',
+              background: 'rgba(26,26,22,0.78)',
+              color: 'rgba(242,235,224,0.92)',
+            }}
+          >
+            ↑ Back to top
+          </button>
+        </div>
+
+      </div>
+    </>
   );
 }
 
@@ -732,26 +1012,50 @@ export default function MainExperience() {
   const totalSpent   = useMemo(() => expenses.reduce((s, e) => s + e.amount, 0), [expenses]);
   const netRemaining = income - totalSpent;
 
+  const lenisRef = useRef<Lenis | null>(null);
+
+  // Boot Lenis smooth scroll and wire it to GSAP's ticker so ScrollTrigger
+  // reads the already-eased scroll position on every animation frame.
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.2,
+      easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    });
+    lenisRef.current = lenis;
+
+    lenis.on('scroll', ScrollTrigger.update);
+    const tick = (time: number) => lenis.raf(time * 1000);
+    gsap.ticker.add(tick);
+    gsap.ticker.lagSmoothing(0);
+
+    return () => {
+      gsap.ticker.remove(tick);
+      lenis.destroy();
+      lenisRef.current = null;
+    };
+  }, []);
+
   // Track which section is currently active → drives which 3D model + ambient word are shown.
-  const [activeModel, setActiveModel] = useState<string>(PLACEHOLDER_MODEL);
+  const [activeKind, setActiveKind] = useState<string>('section-income');
   const [activeWord, setActiveWord] = useState<string>('INCOME');
 
   // Progress-bar state — the bar is a dumb visualization of these two values.
   const [barRemaining, setBarRemaining] = useState<number>(income);
   const [barChip, setBarChip] = useState<string | null>(null);
 
-  const totalSections = 1 + expenses.length + 1;
+  // Vertical world-space gap between consecutive models. On mobile we offset
+  // models down (so each active model lives in the bottom half) which means
+  // the previous model creeps into the top of the viewport — bumping the step
+  // keeps neighbours fully off-screen.
+  const MODEL_Y_STEP = isMobile ? 8 : 5;
+
+  const sections = useMemo(() => [
+    { id: 'section-income',    word: 'INCOME', amount: income },
+    ...expenses.map(e => ({ id: e.id, word: KIND_WORD[e.kind], amount: e.amount })),
+    { id: 'section-remaining', word: 'LEFT',   amount: netRemaining },
+  ], [expenses, income, netRemaining]);
 
   useEffect(() => {
-    const sections: { id: string; model: string; word: string }[] = [
-      { id: 'section-income', model: PLACEHOLDER_MODEL, word: 'INCOME' },
-      ...expenses.map(e => ({
-        id: e.id,
-        model: e.model ?? PLACEHOLDER_MODEL,
-        word: KIND_WORD[e.kind],
-      })),
-      { id: 'section-remaining', model: PLACEHOLDER_MODEL, word: 'LEFT' },
-    ];
 
     let lastIndex = -1;
     // Single ScrollTrigger reading actual DOM position each tick — avoids
@@ -760,12 +1064,8 @@ export default function MainExperience() {
       trigger: '#main-scroll-container',
       start: 'top top',
       end: 'bottom bottom',
-      snap: {
-        snapTo: 1 / (sections.length - 1),
-        duration: { min: 0.7, max: 1.4 },
-        delay: 0.15,
-        ease: 'power3.inOut',
-      },
+      // No snap — Lenis owns the scroll. Snap-on-stop was the source of the
+      // perceived jitter (snap fights user input + Lenis inertia).
       onUpdate: () => {
         const center = window.innerHeight / 2;
         let active = 0;
@@ -783,14 +1083,55 @@ export default function MainExperience() {
         }
         if (active !== lastIndex) {
           lastIndex = active;
-          setActiveModel(sections[active].model);
+          setActiveKind(sections[active].id);
           setActiveWord(sections[active].word);
         }
       },
     });
 
     return () => trigger.kill();
-  }, [expenses]);
+  }, [sections]);
+
+  // Snap to nearest section on scroll idle.
+  useEffect(() => {
+    const sectionIds = sections.map(s => s.id);
+    let snapping = false;
+
+    function getNearestSectionTop(): { top: number; dist: number } {
+      const viewCenter = window.scrollY + window.innerHeight / 2;
+      let bestTop = 0;
+      let bestDist = Infinity;
+      for (const id of sectionIds) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const elTop = window.scrollY + el.getBoundingClientRect().top;
+        const elCenter = elTop + window.innerHeight / 2;
+        const dist = Math.abs(elCenter - viewCenter);
+        if (dist < bestDist) { bestDist = dist; bestTop = elTop; }
+      }
+      return { top: bestTop, dist: bestDist };
+    }
+
+    function snapToNearest() {
+      if (snapping) return;
+      const { top, dist } = getNearestSectionTop();
+      if (dist < 4) return; // already snapped — avoid re-triggering
+      snapping = true;
+      const lenis = lenisRef.current;
+      if (lenis) {
+        lenis.scrollTo(Math.round(top), {
+          duration: 1.0,
+          easing: (t: number) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+        });
+      } else {
+        window.scrollTo({ top: Math.round(top), behavior: 'smooth' });
+      }
+      setTimeout(() => { snapping = false; }, 1300);
+    }
+
+    window.addEventListener('scrollend', snapToNearest);
+    return () => window.removeEventListener('scrollend', snapToNearest);
+  }, [sections]);
 
   // Scroll-drive the progress bar: set remaining + chip per expense section.
   useEffect(() => {
@@ -809,7 +1150,9 @@ export default function MainExperience() {
 
       triggers.push(ScrollTrigger.create({
         trigger: `#${expense.id}`,
-        start: 'top 55%',
+        // Earlier trigger point → bar starts decrementing while the previous
+        // section is still partly visible, overlapping the two states.
+        start: 'top 70%',
         onEnter:     () => { setBarRemaining(remainingAfter);  setBarChip(label); },
         onLeaveBack: () => { setBarRemaining(remainingBefore); setBarChip(null); },
       }));
@@ -818,17 +1161,70 @@ export default function MainExperience() {
     return () => triggers.forEach(t => t.kill());
   }, [income, expenses]);
 
+  // Card reveals are scroll-driven, not state-driven. Each card's opacity/y
+  // is a function of its section's scroll progress: scrubbed in as the section
+  // enters the viewport, scrubbed in reverse when the user scrolls back. This
+  // is what makes fast scroll + reverse scroll smooth — no overlapping tweens
+  // from rapid `activeKind` changes, no flicker on direction reversal.
+  useEffect(() => {
+    const tweens: gsap.core.Tween[] = [];
+
+    sections.forEach((section, i) => {
+      const card = document.querySelector(`#${section.id} [data-section-card]`);
+      if (!card) return;
+      const children = Array.from(card.children);
+
+      if (i === 0) {
+        // First section is on screen at mount — fade in once.
+        gsap.set(children, { opacity: 0, y: 28 });
+        tweens.push(
+          gsap.to(children, {
+            opacity: 1, y: 0,
+            stagger: 0.09, duration: 0.85, ease: 'power3.out', delay: 0.3,
+          }),
+        );
+        return;
+      }
+
+      // Hidden until its section starts entering the viewport.
+      gsap.set(children, { opacity: 0, y: 28 });
+      tweens.push(
+        gsap.to(children, {
+          opacity: 1, y: 0,
+          stagger: 0.05,
+          ease: 'power2.out',
+          scrollTrigger: {
+            trigger: `#${section.id}`,
+            start: 'top 65%',
+            end: 'top 25%',
+            scrub: 0.3,
+            invalidateOnRefresh: true,
+          },
+        }),
+      );
+    });
+
+    return () => {
+      tweens.forEach((t) => {
+        (t.scrollTrigger as ScrollTrigger | undefined)?.kill();
+        t.kill();
+      });
+    };
+  }, [sections]);
+
   const handleOverride = (patch: ExpenseOverrides) =>
     setOverrides((prev) => ({ ...prev, ...patch }));
 
   return (
     <div style={{
-      background: 'radial-gradient(ellipse 82% 72% at 50% 44%, #f9f7f0 0%, #efede3 38%, #d2d6cb 78%, #b6bdb1 100%)',
+      background: 'radial-gradient(ellipse 80% 70% at 50% 42%, #e6e8eb 0%, #cdd1d8 40%, #b8bfc8 80%, #a4acb8 100%)',
       fontFamily: SANS,
       position: 'relative',
     }}>
 
-      <BackgroundAtmosphere />
+      <GridBackground variant="experience" zIndex={0} />
+
+      <BackgroundAtmosphere isMobile={isMobile} />
 
       {/* Grain overlay */}
       <div style={{
@@ -842,65 +1238,43 @@ export default function MainExperience() {
         zIndex: 9999,
       }} />
 
-      {/* Back button */}
-      <div style={{ position: 'fixed', top: 24, left: 24, zIndex: 200 }}>
-        <Link
-          to="/"
-          style={{
-            fontFamily: SANS,
-            fontSize: '0.8rem',
-            color: 'rgba(26,26,22,0.5)',
-            textDecoration: 'none',
-            border: '1px solid rgba(26,26,22,0.15)',
-            borderRadius: 6,
-            padding: '0.38rem 0.9rem',
-            background: 'rgba(242,235,224,0.75)',
-            display: 'inline-block',
-          }}
-        >
-          ← Back
-        </Link>
-      </div>
+      {/* Logo */}
+      <Link to="/" className={expStyles.logoWrap}>
+        <div className={expStyles.logoMask} />
+      </Link>
 
-      <ModeToggle mode={mode} onChange={setMode} />
-
-      {/* Scroll hint */}
-      <div style={{
-        position: 'fixed',
-        bottom: 28, left: '50%',
-        transform: 'translateX(-50%)',
-        zIndex: 200,
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        gap: '0.3rem',
-        color: 'rgba(26,26,22,0.32)',
-        fontFamily: SANS,
-        fontSize: '0.58rem',
-        letterSpacing: '0.1em',
-        textTransform: 'uppercase',
-        pointerEvents: 'none',
-      }}>
-        <span>Scroll</span>
-        <span style={{ fontSize: '0.85rem' }}>↓</span>
-      </div>
+      <ScrollHint />
 
       <BudgetProgressBar income={income} remaining={barRemaining} chipLabel={barChip} />
+      <BackToTopButton lenisRef={lenisRef} />
 
       {/* Ambient blurred word — deepest layer, sits behind particles + 3D */}
       <AmbientWord word={activeWord} isMobile={isMobile} />
 
       {/* Particles — dedicated canvas at zIndex 1, always behind the 3D model */}
-      <ParticleBackdrop />
+      <ParticleBackdrop isMobile={isMobile} />
 
-      {/* Fixed 3-D canvas — swaps model based on active section */}
-      <div style={{ width: '100vw', height: '100vh', position: 'fixed', top: 0, left: 0, zIndex: 2 }}>
-        <Canvas camera={{ position: [0, 0, 8], fov: 50 }} gl={{ alpha: true }}>
-          <fog attach="fog" args={['#ebe2d2', 6, 22]} />
-          <ambientLight intensity={1.1} color="#f2ebe0" />
+      {/* Fixed 3-D canvas — all models at their section Y positions.
+          On mobile, every model is offset downward so the active one sits in
+          the lower half of the viewport, leaving the top half for the text. */}
+      <div style={{ width: '100vw', height: '100svh', position: 'fixed', top: 0, left: 0, zIndex: 2 }}>
+        <Canvas
+          camera={{ position: [0, 0, 8], fov: 50 }}
+          dpr={[1, isMobile ? 1.5 : 2]}
+          gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
+        >
+          <fog attach="fog" args={['#c8cdd6', 6, 22]} />
+          <ambientLight intensity={1.1} color="#f0f2f6" />
           <directionalLight position={[10, 10, 10]} intensity={1.0} />
-          <CameraAnimator sectionCount={totalSections} />
-          <Suspense fallback={null}>
-            <SectionModel key={activeModel} url={activeModel} />
-          </Suspense>
+          <CameraAnimator totalY={MODEL_Y_STEP * (sections.length - 1)} />
+          <HologramTimeAnimator />
+          <MouseInfluenceTracker />
+          <AllHologramScenes
+            sections={sections}
+            step={MODEL_Y_STEP}
+            activeId={activeKind}
+            yOffset={isMobile ? -2.2 : 0}
+          />
         </Canvas>
       </div>
 
@@ -909,16 +1283,19 @@ export default function MainExperience() {
 
         {/* Income intro */}
         <div id="section-income" style={sectionStyle}>
-          <span style={labelStyle}>Your income</span>
-          <h1 style={headingStyle}>
-            Starting with<br />
-            <span style={{ color: 'rgba(26,26,22,0.4)' }}>£{income.toLocaleString()}</span>
-          </h1>
-          <p style={bodyStyle}>
-            {mode === 'average'
-              ? 'Scroll down to watch your monthly budget divide itself — line by line.'
-              : 'You’re in custom mode. Adjust the sliders as you scroll — the bar updates in real time.'}
-          </p>
+          <div data-section-card style={sectionCardStyle}>
+            <span style={labelStyle}>Your income</span>
+            <h1 style={{ ...headingStyle, margin: '0 0 0.3rem', fontSize: 'clamp(2rem, 3.8vw, 3.6rem)' }}>
+              Starting with<br />
+              <span style={{ ...numberStyle, color: '#1c4d2e' }}>£{income.toLocaleString()}</span>
+            </h1>
+            <p style={{ ...bodyStyle, margin: '0 0 0.9rem' }}>
+              {mode === 'average'
+                ? 'Scroll to see where it goes, one line at a time.'
+                : "You're in custom mode. Adjust the sliders as you scroll."}
+            </p>
+            <ModeToggle mode={mode} onChange={setMode} />
+          </div>
         </div>
 
         {expenses.map(expense => (
@@ -934,34 +1311,77 @@ export default function MainExperience() {
 
         {/* Remaining balance */}
         <div id="section-remaining" style={sectionStyle}>
-          <span style={labelStyle}>What's left</span>
-          <h1 style={headingStyle}>Remaining Balance</h1>
-          <p style={bodyStyle}>
-            After your expenses, you're left with{' '}
-            <strong style={{ color: netRemaining < 0 ? '#8b2216' : '#1c442a', fontWeight: 500 }}>
+          <div data-section-card style={sectionCardStyle}>
+            <span style={labelStyle}>What's left</span>
+            <h1 style={{
+              ...headingStyle,
+              margin: '0 0 0.3rem',
+              fontSize: 'clamp(2.4rem, 4.6vw, 4rem)',
+            }}>
+              {/* Non-breaking space keeps "The bottom" on one line at every viewport,
+                  even inside the 400px section card. */}
+              The{' '}bottom<br />
+              <span style={{
+                position: 'relative',
+                display: 'inline-block',
+                paddingBottom: '0.08em',
+              }}>
+                line
+                <span aria-hidden="true" style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 2,
+                  background: 'currentColor',
+                  opacity: 0.55,
+                }} />
+              </span>
+              .
+            </h1>
+            <p style={{ ...bodyStyle, margin: '0 0 0.2rem' }}>
+              After your expenses, you're left with
+            </p>
+            <span style={{
+              ...numberStyle,
+              color: netRemaining < 0 ? '#8b2216' : '#1c442a',
+              whiteSpace: 'nowrap',
+            }}>
               £{netRemaining.toLocaleString()}
-            </strong>{' '}
-            each month.
-          </p>
-          <button
-            type="button"
-            onClick={() => navigate('/affordability', { state: { income, monthlyRemaining: netRemaining } })}
-            style={{
-              marginTop: '1.6rem',
-              alignSelf: 'flex-start',
-              fontFamily: SANS,
-              fontSize: '0.82rem',
-              padding: '0.7rem 1.2rem',
-              border: '1px solid #1c4d2e',
-              borderRadius: 999,
-              background: '#1c4d2e',
-              color: '#f2ebe0',
-              cursor: 'pointer',
-              transition: 'background 0.15s, color 0.15s',
-            }}
-          >
-            See what you can do with your balance →
-          </button>
+              <span style={{
+                fontFamily: BODY,
+                fontStyle: 'normal',
+                fontWeight: 400,
+                fontSize: '0.95rem',
+                letterSpacing: 0,
+                color: 'rgba(26,26,22,0.45)',
+                marginLeft: 10,
+                verticalAlign: 'middle',
+                whiteSpace: 'nowrap',
+              }}>
+                /month
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => navigate('/affordability', { state: { income, monthlyRemaining: netRemaining } })}
+              style={{
+                marginTop: '1.4rem',
+                alignSelf: 'flex-start',
+                fontFamily: SANS,
+                fontSize: '0.82rem',
+                padding: '0.7rem 1.2rem',
+                border: '1px solid #1c4d2e',
+                borderRadius: 999,
+                background: '#1c4d2e',
+                color: '#f2ebe0',
+                cursor: 'pointer',
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              See what's in reach →
+            </button>
+          </div>
         </div>
 
       </div>

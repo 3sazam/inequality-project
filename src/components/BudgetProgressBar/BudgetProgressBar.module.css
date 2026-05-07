@@ -2,16 +2,16 @@
   --track-w: 44px;
   --track-h: 46vh;
   --fg: #1a1a16;
-  --fill: rgba(28, 68, 42, 0.7);
-  --track-bg: rgba(26, 26, 22, 0.06);
-  --track-border: rgba(26, 26, 22, 0.1);
+  --fill: rgba(28, 68, 42, 0.62);
+  --track-bg: rgba(255, 255, 255, 0.18);
+  --track-border: rgba(255, 255, 255, 0.35);
   --chip-fg: #8b2216;
-  --chip-bg: rgba(139, 34, 22, 0.07);
-  --chip-border: rgba(139, 34, 22, 0.18);
+  --chip-bg: rgba(255, 255, 255, 0.22);
+  --chip-border: rgba(255, 255, 255, 0.4);
 
   position: fixed;
   top: 50%;
-  right: 36px;
+  right: 28px;
   transform: translateY(-50%);
   z-index: 100;
 
@@ -21,15 +21,47 @@
   gap: 12px;
 
   padding: 1.2rem 1rem;
-  border-radius: 14px;
-  background: rgba(242, 235, 224, 0.82);
-  border: 1px solid rgba(26, 26, 22, 0.13);
+  border-radius: 22px;
+  background:
+    linear-gradient(
+      155deg,
+      rgba(255, 255, 255, 0.32) 0%,
+      rgba(255, 255, 255, 0.12) 42%,
+      rgba(255, 255, 255, 0.06) 60%,
+      rgba(255, 255, 255, 0.18) 100%
+    );
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.12),
+    0 1px 0 rgba(255, 255, 255, 0.6) inset,
+    0 -1px 0 rgba(255, 255, 255, 0.15) inset,
+    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
 
   user-select: none;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Space Grotesk', system-ui, sans-serif;
 
   /* Anchor point for absolutely-positioned chip below the bar. */
   isolation: isolate;
+}
+
+/* Specular highlight — the subtle "sheen" that sells the liquid-glass refraction. */
+.root::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      120% 60% at 30% 0%,
+      rgba(255, 255, 255, 0.45) 0%,
+      rgba(255, 255, 255, 0) 55%
+    );
+  mix-blend-mode: overlay;
+  opacity: 0.9;
+  z-index: -1;
 }
 
 .header {
@@ -43,20 +75,20 @@
   font-size: 0.58rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(26, 26, 22, 0.38);
+  color: rgba(26, 26, 22, 0.55);
 }
 
 .amount {
   font-family: 'Instrument Serif', 'Cormorant Garamond', serif;
   font-style: italic;
   font-weight: 400;
-  font-size: 1.5rem;
+  font-size: 2rem;
   color: var(--fg);
   font-variant-numeric: tabular-nums;
 }
 
 .percent {
-  font-size: 0.8rem;
+  font-size: 1rem;
   color: rgba(26, 26, 22, 0.45);
   font-variant-numeric: tabular-nums;
 }
@@ -91,41 +123,84 @@
 .chip {
   position: absolute;
   top: 100%;
-  left: 50%;
+  right: 0;
   margin-top: 10px;
-  padding: 0.22rem 0.55rem;
+  padding: 0.3rem 0.75rem;
   border-radius: 4px;
-  font-size: 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
   line-height: 1.4;
-  text-align: center;
+  text-align: right;
   white-space: nowrap;
   color: var(--chip-fg);
   background: var(--chip-bg);
   border: 1px solid var(--chip-border);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.5) inset;
   opacity: 0;
-  transform: translateX(-50%) translateY(6px);
+  transform: translateY(6px);
   transition: opacity 300ms ease, transform 300ms ease;
   pointer-events: none;
 }
 
 .chipVisible {
   opacity: 1;
-  transform: translateX(-50%) translateY(0);
+  transform: translateY(0);
 }
 
-/* Mobile */
+/* Mobile: convert to a horizontal top pill so the 3D scene gets the full viewport. */
 @media (max-width: 720px) {
   .root {
-    right: 10px;
+    /* Anchor to the top, centred, with safe-area padding for notched devices. */
+    top: max(env(safe-area-inset-top), 14px);
+    right: 14px;
+    left: 14px;
+    transform: none;
+    max-width: 420px;
+    margin-inline: auto;
+
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+    padding: 0.55rem 0.85rem;
+    border-radius: 999px;
+  }
+
+  .header {
+    flex-direction: row;
+    align-items: baseline;
     gap: 8px;
-    padding: 0.75rem 0.6rem;
-    border-radius: 10px;
-    --track-w: 28px;
-    --track-h: 34vh;
+    text-align: left;
+    flex: 0 0 auto;
+  }
+  .label {
+    font-size: 0.55rem;
   }
   .amount {
     font-size: 1.1rem;
   }
+  .percent {
+    font-size: 0.78rem;
+  }
+
+  /* Track flips to horizontal: full remaining width, thin height. */
+  .track {
+    flex: 1 1 auto;
+    width: auto;
+    height: 6px;
+    border-radius: 999px;
+  }
+  .fill {
+    border-radius: 999px;
+    transform-origin: left;
+    transform: scaleX(var(--pct, 1));
+  }
+
+  /* Footnote and chip eat scarce space on mobile — hide them. */
+  .footnote,
   .chip {
     display: none;
   }
