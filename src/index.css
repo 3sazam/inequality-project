@@ -8,11 +8,12 @@
 html,
 body,
 #root {
-  /* On iOS Safari `100%` collapses when the URL bar is showing, leaving the
-   * old viewport's blank area visible during overscroll. Use the dynamic
-   * viewport unit so html always fills the actual visible area. */
+  /* `100%` collapses on iOS Safari while the URL bar is showing, and `100dvh`
+   * shrinks/grows as that bar appears or hides — both leave bg gaps. `100lvh`
+   * is the largest possible viewport (chrome fully retracted), so html/body
+   * always cover the maximum area the user can possibly see. */
   min-height: 100%;
-  min-height: 100dvh;
+  min-height: 100lvh;
 }
 
 html {
@@ -20,10 +21,14 @@ html {
    * the OS default (black). Each page also sets this dynamically via
    * usePageBackground so the colour stays coherent route-to-route. */
   background: #f2ebe0;
-  /* Stop the bounce/rubber-band on Android Chrome and modern iOS Safari.
+  /* Stop bounce/rubber-band on Android Chrome and modern iOS Safari.
    * Doesn't fully disable iOS bounce, but every visible pixel during the
    * bounce is now the page's own colour, so the user sees no "black bar". */
   overscroll-behavior: none;
+  /* Side-overflow guard. Some elements (the stretched "wider" letterforms on
+   * the home title) can render past the viewport edge; without this iOS would
+   * zoom out to fit the overflow, making the page feel "stuck zoomed". */
+  overflow-x: hidden;
 }
 
 body {

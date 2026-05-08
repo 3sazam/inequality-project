@@ -125,7 +125,7 @@
 .prefix {
   font-family: 'General Sans', system-ui, sans-serif;
   font-weight: 300;
-  font-size: 0.9rem;
+  font-size: 1rem;
   letter-spacing: 0.04em;
   color: rgba(26, 26, 22, 0.38);
   flex-shrink: 0;
@@ -135,7 +135,11 @@
   flex: 1;
   min-width: 0;
   padding: 0;
-  font-size: 0.9rem;
+  /* 16px (1rem) is the iOS Safari threshold below which focusing the field
+   * triggers an auto-zoom that the browser then never resets. The user lands
+   * on a page that's stuck zoomed in even after navigating away. Anything
+   * <16px would re-introduce that bug. */
+  font-size: 1rem;
   font-family: 'General Sans', system-ui, sans-serif;
   font-weight: 300;
   letter-spacing: 0.04em;

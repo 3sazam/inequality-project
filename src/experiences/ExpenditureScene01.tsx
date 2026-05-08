@@ -1044,10 +1044,11 @@ function BackToTopButton({ lenisRef }: { lenisRef: React.RefObject<Lenis | null>
 /* ── Main page ───────────────────────────────────── */
 
 export default function MainExperience() {
-  // Match the outer stop of the radial gradient on the inner wrapper. When
-  // iOS rubber-bands past the document's edges, the user sees the same slate
-  // tone as the gradient's perimeter — no abrupt black/cream band.
-  usePageBackground('#a4acb8');
+  // BG matches the outer stop of the radial gradient so iOS rubber-band past
+  // the page edges stays in family. theme-color is the gradient's mid-tone —
+  // that's what the user actually sees behind the URL bar at the top of the
+  // viewport, so the Safari chrome tint reads as a continuation of the page.
+  usePageBackground('#a4acb8', '#cdd1d8');
   const location = useLocation();
   const navigate = useNavigate();
   const income   = Number(location.state?.userInput) || 3500;
@@ -1319,8 +1320,11 @@ export default function MainExperience() {
 
       {/* Fixed 3-D canvas — all models at their section Y positions.
           On mobile, every model is offset downward so the active one sits in
-          the lower half of the viewport, leaving the top half for the text. */}
-      <div style={{ width: '100vw', height: '100svh', position: 'fixed', top: 0, left: 0, zIndex: 2 }}>
+          the lower half of the viewport, leaving the top half for the text.
+          `100dvh` lets the canvas track Safari's URL bar as it shows/hides;
+          `100svh` would leave a gap at the bottom that crops the model when
+          the chrome retracts on scroll. */}
+      <div style={{ width: '100vw', height: '100dvh', position: 'fixed', top: 0, left: 0, zIndex: 2 }}>
         <Canvas
           camera={{ position: [0, 0, 8], fov: 50 }}
           // Mobile GPUs choke on 1.5+ DPR with two canvases plus heavy CSS
@@ -1338,7 +1342,11 @@ export default function MainExperience() {
             sections={sections}
             step={MODEL_Y_STEP}
             activeId={activeKind}
-            yOffset={isMobile ? -1.4 : 0}
+            // Mobile pushes the model down so it sits below the text card.
+            // -1.4 felt right when the canvas equalled the small viewport,
+            // but at 100dvh the model's bottom kissed Safari's toolbar; -1.0
+            // keeps it in the lower half with comfortable clearance.
+            yOffset={isMobile ? -1.0 : 0}
           />
         </Canvas>
       </div>
