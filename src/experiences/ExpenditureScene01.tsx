@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import * as THREE from 'three';
@@ -23,6 +23,7 @@ import {
 import type { StudentLoanPlan, CouncilBand } from './ukTax';
 import { BudgetProgressBar } from '../components/BudgetProgressBar';
 import { GridBackground } from '../components/GridBackground';
+import { usePageBackground } from '../lib/usePageBackground';
 import expStyles from './expenditure.module.css';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -80,7 +81,9 @@ function makeSoftDotTexture(): THREE.CanvasTexture {
 
 const PARTICLE_VOLUME: [number, number] = [26, 120];
 const PARTICLE_COUNT_DESKTOP = 700;
-const PARTICLE_COUNT_MOBILE  = 280;
+// 120 is the floor where the field still reads as a continuous backdrop on a
+// 360-pt phone. Going lower starts to feel like scattered dots.
+const PARTICLE_COUNT_MOBILE  = 120;
 // Camera fov 50 at z=10 → world height visible = 2*10*tan(25°) ≈ 9.33
 const VISIBLE_WORLD_HEIGHT = 2 * 10 * Math.tan((50 / 2) * Math.PI / 180);
 
@@ -197,7 +200,7 @@ const ParticleBackdrop = memo(function ParticleBackdrop({ isMobile }: { isMobile
     >
       <Canvas
         camera={{ position: [0, 0, 10], fov: 50 }}
-        dpr={[1, isMobile ? 1.25 : 1.5]}
+        dpr={[1, isMobile ? 1 : 1.5]}
         gl={{ alpha: true, antialias: false, powerPreference: 'high-performance' }}
       >
         <ParticleLayer count={count} />
@@ -533,7 +536,7 @@ const headingStyle: React.CSSProperties = {
 
 const bodyStyle: React.CSSProperties = {
   fontFamily: BODY,
-  margin: '0 0 0.15rem',
+  margin: '0 0 0.3rem',
   fontSize: '1.05rem',
   lineHeight: 1.6,
   color: 'rgba(26,26,22,0.5)',
@@ -556,14 +559,16 @@ function makeSectionStyle(isMobile: boolean): CSSProperties {
     height: '100svh',
     display: 'flex',
     flexDirection: 'column',
-    // Mobile: text occupies the top third, leaving the model visible below.
-    // Desktop: text vertically centered on left, model fills the right.
     justifyContent: isMobile ? 'flex-start' : 'center',
     paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 88px)' : 0,
     paddingLeft: isMobile ? '6vw' : '6vw',
     paddingRight: isMobile ? '6vw' : 0,
     maxWidth: isMobile ? '100vw' : '52vw',
   };
+}
+
+function makeExpenseSectionStyle(isMobile: boolean): CSSProperties {
+  return makeSectionStyle(isMobile);
 }
 
 /* ── Small controls ──────────────────────────────── */
@@ -713,15 +718,59 @@ function ExpenseSection({
       ? expense.descriptionCustom
       : expense.description;
 
+  if (expense.kind !== 'ni') {
+    return (
+      <div id={expense.id} style={makeExpenseSectionStyle(isMobile)}>
+        <div data-section-card style={{ ...sectionCardStyle, maxWidth: 'none' }}>
+          <h1 style={{ ...headingStyle, margin: '0 0 0.3rem', whiteSpace: 'nowrap', ...(expense.kind === 'rent' && { fontSize: 'clamp(2.6rem, 4.6vw, 4.4rem)' }) }}>{expense.label}</h1>
+          <p style={bodyStyle}>{description}</p>
+          <span style={{
+            ...numberStyle,
+            color: '#8b2216',
+            marginTop: 0,
+            whiteSpace: 'nowrap',
+          }}>
+            − £{expense.amount.toLocaleString()}
+            <span style={{
+              fontFamily: BODY,
+              fontStyle: 'normal',
+              fontWeight: 400,
+              fontSize: '0.95rem',
+              letterSpacing: 0,
+              color: 'rgba(26,26,22,0.45)',
+              marginLeft: 10,
+              verticalAlign: 'middle',
+              whiteSpace: 'nowrap',
+            }}>/month</span>
+            {expense.derived && (
+              <span style={{
+                fontFamily: SANS,
+                fontStyle: 'normal',
+                fontWeight: 400,
+                fontSize: '0.7rem',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: 'rgba(26,26,22,0.35)',
+                marginLeft: 10,
+                verticalAlign: 'middle',
+              }}>(auto)</span>
+            )}
+          </span>
+          {control}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div id={expense.id} style={makeSectionStyle(isMobile)}>
+    <div id={expense.id} style={makeExpenseSectionStyle(isMobile)}>
       <div data-section-card style={sectionCardStyle}>
         <h1 style={{ ...headingStyle, margin: '0 0 0.3rem' }}>{expense.label}</h1>
         <p style={bodyStyle}>{description}</p>
         <span style={{
           ...numberStyle,
           color: '#8b2216',
-          marginTop: '0.25rem',
+          marginTop: 0,
           whiteSpace: 'nowrap',
         }}>
           − £{expense.amount.toLocaleString()}
@@ -995,6 +1044,10 @@ function BackToTopButton({ lenisRef }: { lenisRef: React.RefObject<Lenis | null>
 /* ── Main page ───────────────────────────────────── */
 
 export default function MainExperience() {
+  // Match the outer stop of the radial gradient on the inner wrapper. When
+  // iOS rubber-bands past the document's edges, the user sees the same slate
+  // tone as the gradient's perimeter — no abrupt black/cream band.
+  usePageBackground('#a4acb8');
   const location = useLocation();
   const navigate = useNavigate();
   const income   = Number(location.state?.userInput) || 3500;
@@ -1014,9 +1067,12 @@ export default function MainExperience() {
 
   const lenisRef = useRef<Lenis | null>(null);
 
-  // Boot Lenis smooth scroll and wire it to GSAP's ticker so ScrollTrigger
-  // reads the already-eased scroll position on every animation frame.
+  // Boot Lenis smooth scroll on desktop only. On touch devices Lenis intercepts
+  // touch events and re-animates them, which fights iOS's well-tuned momentum
+  // scroll and shows up as visible input lag. Native scroll is already silky
+  // smooth on phones — we just opt out and let the OS do its job.
   useEffect(() => {
+    if (isMobile) return;
     const lenis = new Lenis({
       duration: 1.2,
       easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
@@ -1026,14 +1082,13 @@ export default function MainExperience() {
     lenis.on('scroll', ScrollTrigger.update);
     const tick = (time: number) => lenis.raf(time * 1000);
     gsap.ticker.add(tick);
-    gsap.ticker.lagSmoothing(0);
 
     return () => {
       gsap.ticker.remove(tick);
       lenis.destroy();
       lenisRef.current = null;
     };
-  }, []);
+  }, [isMobile]);
 
   // Track which section is currently active → drives which 3D model + ambient word are shown.
   const [activeKind, setActiveKind] = useState<string>('section-income');
@@ -1166,7 +1221,7 @@ export default function MainExperience() {
   // enters the viewport, scrubbed in reverse when the user scrolls back. This
   // is what makes fast scroll + reverse scroll smooth — no overlapping tweens
   // from rapid `activeKind` changes, no flicker on direction reversal.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const tweens: gsap.core.Tween[] = [];
 
     sections.forEach((section, i) => {
@@ -1222,9 +1277,17 @@ export default function MainExperience() {
       position: 'relative',
     }}>
 
-      <GridBackground variant="experience" zIndex={0} />
+      {/* GridBackground runs a canvas2d RAF loop that re-strokes the entire
+       *  grid every frame — wasteful on mobile (no cursor, no glow). Skipped
+       *  there. The radial gradient on the page wrapper carries enough
+       *  atmosphere on its own. */}
+      {!isMobile && <GridBackground variant="experience" zIndex={0} />}
 
-      <BackgroundAtmosphere isMobile={isMobile} />
+      {/* The animated cloud blobs are lovely on desktop but mobile GPUs run
+       *  CSS filter:blur on huge fixed elements as a software fallback. Skip
+       *  them on phones; the page still reads as moody from the gradient +
+       *  particles + grain alone. */}
+      {!isMobile && <BackgroundAtmosphere isMobile={isMobile} />}
 
       {/* Grain overlay */}
       <div style={{
@@ -1260,7 +1323,9 @@ export default function MainExperience() {
       <div style={{ width: '100vw', height: '100svh', position: 'fixed', top: 0, left: 0, zIndex: 2 }}>
         <Canvas
           camera={{ position: [0, 0, 8], fov: 50 }}
-          dpr={[1, isMobile ? 1.5 : 2]}
+          // Mobile GPUs choke on 1.5+ DPR with two canvases plus heavy CSS
+          // compositing. 1.25 keeps the hologram crisp without melting frames.
+          dpr={[1, isMobile ? 1.25 : 2]}
           gl={{ alpha: true, antialias: true, powerPreference: 'high-performance' }}
         >
           <fog attach="fog" args={['#c8cdd6', 6, 22]} />
@@ -1273,7 +1338,7 @@ export default function MainExperience() {
             sections={sections}
             step={MODEL_Y_STEP}
             activeId={activeKind}
-            yOffset={isMobile ? -2.2 : 0}
+            yOffset={isMobile ? -1.4 : 0}
           />
         </Canvas>
       </div>
@@ -1281,15 +1346,20 @@ export default function MainExperience() {
       {/* HTML scroll container */}
       <div id="main-scroll-container" style={{ position: 'relative', zIndex: 10, width: '100%' }}>
 
-        {/* Income intro */}
-        <div id="section-income" style={sectionStyle}>
+        {/* Income intro — keep the original (pre-pill) top padding so the
+            opening "Starting with £X,XXX" sits where it always did. */}
+        <div id="section-income" style={{ ...sectionStyle, paddingTop: isMobile ? '14vh' : 0 }}>
           <div data-section-card style={sectionCardStyle}>
             <span style={labelStyle}>Your income</span>
-            <h1 style={{ ...headingStyle, margin: '0 0 0.3rem', fontSize: 'clamp(2rem, 3.8vw, 3.6rem)' }}>
-              Starting with<br />
-              <span style={{ ...numberStyle, color: '#1c4d2e' }}>£{income.toLocaleString()}</span>
+            <h1 style={{ ...headingStyle, margin: '0 0 1.6rem', fontSize: 'clamp(2rem, 3.8vw, 3.6rem)' }}>
+              <span style={{ display: 'block', lineHeight: 1, marginBottom: '0.15rem' }}>
+                Starting with
+              </span>
+              <span style={{ ...numberStyle, color: '#1c4d2e', display: 'inline-block' }}>
+                £{income.toLocaleString()}
+              </span>
             </h1>
-            <p style={{ ...bodyStyle, margin: '0 0 0.9rem' }}>
+            <p style={{ ...bodyStyle, margin: '0 0 1rem' }}>
               {mode === 'average'
                 ? 'Scroll to see where it goes, one line at a time.'
                 : "You're in custom mode. Adjust the sliders as you scroll."}

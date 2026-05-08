@@ -2,11 +2,27 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { GridBackground } from '../components/GridBackground';
+import { usePageBackground } from '../lib/usePageBackground';
 import styles from './home.module.css';
 
+// People earning £15k/month (£180k/yr) and up are well into the top 1% of UK
+// take-home — the slow-climb framing isn't aimed at them.
+const TOO_RICH_THRESHOLD = 15000;
+
+// `pointer: coarse` is the most reliable touch-device probe — much better
+// than width-based heuristics for distinguishing actual phones/tablets from
+// narrow desktop windows.
+function isTouchDevice(): boolean {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia('(pointer: coarse)').matches;
+}
+
 export default function Home() {
+  usePageBackground('#f2ebe0');
   const [inputValue, setInputValue] = useState('');
   const [pressing, setPressing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isTouch, setIsTouch] = useState(isTouchDevice);
   const navigate = useNavigate();
   const btnRef = useRef<HTMLButtonElement>(null);
   const bgRef = useRef<HTMLDivElement>(null);
@@ -15,6 +31,17 @@ export default function Home() {
   const raf = useRef<number | null>(null);
 
   useEffect(() => {
+    const mq = window.matchMedia('(pointer: coarse)');
+    const handler = (e: MediaQueryListEvent) => setIsTouch(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  useEffect(() => {
+    // Touch devices have no hovering cursor, so the parallax RAF loop runs
+    // 60 fps writing the same identity transform — pure CPU waste. Skip it.
+    if (isTouch) return;
+
     const onMove = (e: MouseEvent) => {
       // Negate: cursor right → background drifts left (camera-pan parallax)
       target.current.x = -(e.clientX - window.innerWidth  / 2) * 0.012;
@@ -40,12 +67,17 @@ export default function Home() {
       window.removeEventListener('mouseleave', onLeave);
       if (raf.current) cancelAnimationFrame(raf.current);
     };
-  }, []);
+  }, [isTouch]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const raw = Number(inputValue);
     if (!raw || raw <= 0) return;
+    if (raw >= TOO_RICH_THRESHOLD) {
+      setError("Actually, you're not meant to be using this website.");
+      return;
+    }
+    setError(null);
     navigate('/3d-experience', { state: { userInput: raw } });
   };
 
@@ -54,7 +86,10 @@ export default function Home() {
       <div ref={bgRef} aria-hidden style={{ position: 'fixed', top: -20, left: -20, right: -20, bottom: -20, pointerEvents: 'none', zIndex: -1, willChange: 'transform' }}>
         <AnimatedBackground />
       </div>
-      <GridBackground variant="home" zIndex={0} />
+      {/* Grid's animated cursor-glow has nothing to attach to on touch devices,
+       *  and the canvas2d RAF loop redrawing the static base grid is pure cost
+       *  with no payoff there. */}
+      {!isTouch && <GridBackground variant="home" zIndex={0} />}
       <div className={styles.logo} role="img" aria-label="Divide" />
       <main className={styles.main}>
         <h1 className={styles.title} style={{ fontFamily: "'Manrope', sans-serif" }}>
@@ -68,7 +103,10 @@ export default function Home() {
               type="number"
               placeholder="your monthly income"
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={(e) => {
+                setInputValue(e.target.value);
+                if (error) setError(null);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   setPressing(true);
@@ -87,6 +125,11 @@ export default function Home() {
           >
             enter ↵
           </button>
+          {error && (
+            <p role="alert" className={styles.error}>
+              {error}
+            </p>
+          )}
         </form>
       </main>
     </div>

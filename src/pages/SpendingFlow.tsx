@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { usePageBackground } from '../lib/usePageBackground';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -42,6 +43,7 @@ const GILT = [
 ];
 
 export default function SpendingFlow() {
+  usePageBackground(BG);
   const location  = useLocation();
   const navigate  = useNavigate();
   const income    = Number(location.state?.income)           || 3500;
@@ -102,7 +104,7 @@ export default function SpendingFlow() {
   }, []);
 
   return (
-    <div style={{ background: BG, minHeight: '100vh', position: 'relative' }}>
+    <div style={{ background: BG, minHeight: '100dvh', position: 'relative' }}>
 
       {/* Grain */}
       <div style={{
@@ -400,7 +402,7 @@ export default function SpendingFlow() {
             </p>
             <button
               type="button"
-              onClick={() => navigate('/wealth-inequality', { state: { income, monthlyRemaining: remaining } })}
+              onClick={() => navigate('/')}
               style={{
                 fontFamily: SANS, fontSize: '0.85rem',
                 padding: '0.75rem 1.5rem',
@@ -408,7 +410,7 @@ export default function SpendingFlow() {
                 background: GREEN, color: BG, cursor: 'pointer',
               }}
             >
-              See the bigger picture →
+              Start over ↻
             </button>
           </div>
         </section>

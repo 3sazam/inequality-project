@@ -8,16 +8,34 @@
 html,
 body,
 #root {
-  height: 100%;
+  /* On iOS Safari `100%` collapses when the URL bar is showing, leaving the
+   * old viewport's blank area visible during overscroll. Use the dynamic
+   * viewport unit so html always fills the actual visible area. */
+  min-height: 100%;
+  min-height: 100dvh;
+}
+
+html {
+  /* Match the warmer page tone so iOS rubber-band overscroll never reveals
+   * the OS default (black). Each page also sets this dynamically via
+   * usePageBackground so the colour stays coherent route-to-route. */
+  background: #f2ebe0;
+  /* Stop the bounce/rubber-band on Android Chrome and modern iOS Safari.
+   * Doesn't fully disable iOS bounce, but every visible pixel during the
+   * bounce is now the page's own colour, so the user sees no "black bar". */
+  overscroll-behavior: none;
 }
 
 body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  background: #06060f;
+  background: #f2ebe0;
   color: #1a1a16;
   -webkit-font-smoothing: antialiased;
+  /* Belt and braces — same as html, applied here too because some browsers
+   * paint body bg into the overscroll area first. */
+  overscroll-behavior: none;
 }
 
 input[type='number']::-webkit-inner-spin-button,

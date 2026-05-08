@@ -5,6 +5,7 @@ import { useLocation, useNavigate, Link } from 'react-router-dom';
 import * as THREE from 'three';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { usePageBackground } from '../lib/usePageBackground';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -97,7 +98,9 @@ const FRAG = /* glsl */`
 `;
 
 const P_COUNT_DESKTOP = 420;
-const P_COUNT_MOBILE  = 200;
+// Lower than Affordability's old 200 — the field reads continuously down to
+// ~120 on a narrow viewport and saves real GPU during the camera pan.
+const P_COUNT_MOBILE  = 120;
 const P_VX = 38;
 const P_VY = 18;
 
@@ -334,6 +337,7 @@ function useIsMobile(breakpoint = 720) {
 }
 
 export default function Affordability() {
+  usePageBackground(BG);
   const location = useLocation();
   const navigate = useNavigate();
   const income           = Number(location.state?.income)           || 3500;
@@ -484,7 +488,7 @@ export default function Affordability() {
           lineHeight: 1.6,
         }}>
           {isMobile
-            ? 'Each dot is a milestone — the further right, the longer it takes'
+            ? 'Each dot is a milestone. The further right, the longer it takes.'
             : 'Each dot is a milestone · the further right, the longer it takes'}
         </span>
       </div>
@@ -548,7 +552,7 @@ export default function Affordability() {
       <div style={{ position: 'fixed', inset: 0, zIndex: 1, background: BG }}>
         <Canvas
           camera={{ position: [CAM_START, 0, CAM_Z], fov: CAM_FOV }}
-          dpr={[1, isMobile ? 1.5 : 2]}
+          dpr={[1, isMobile ? 1.25 : 2]}
           gl={{ antialias: true, powerPreference: 'high-performance' }}
         >
           <Suspense fallback={null}>
