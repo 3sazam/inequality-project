@@ -554,13 +554,37 @@ const numberStyle: React.CSSProperties = {
   display: 'inline-block',
 };
 
+/* ── Mobile-tightened text styles ─────────────────
+ *
+ * On a real iPhone the visible viewport is ~180pt smaller than what Playwright
+ * shows, because Safari's URL bar and bottom toolbar each eat into 100dvh.
+ * The full-size heading + description + amount exceed the upper-half budget
+ * and start drifting into the model's territory. These compact variants keep
+ * text inside the upper third so the 3D model below has room to breathe.
+ */
+const mobileHeadingStyle: React.CSSProperties = {
+  ...headingStyle,
+  fontSize: 'clamp(1.9rem, 7.4vw, 2.6rem)',
+};
+const mobileBodyStyle: React.CSSProperties = {
+  ...bodyStyle,
+  fontSize: '0.92rem',
+  lineHeight: 1.5,
+};
+const mobileNumberStyle: React.CSSProperties = {
+  ...numberStyle,
+  fontSize: 'clamp(2.2rem, 8.4vw, 3rem)',
+};
+
 function makeSectionStyle(isMobile: boolean): CSSProperties {
   return {
     height: '100svh',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: isMobile ? 'flex-start' : 'center',
-    paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 88px)' : 0,
+    // Mobile header stack: progress pill (top ~46px) → logo (32px, 12px gap)
+    // → section text. 112px clears both with breathing room above the title.
+    paddingTop: isMobile ? 'calc(env(safe-area-inset-top) + 112px)' : 0,
     paddingLeft: isMobile ? '6vw' : '6vw',
     paddingRight: isMobile ? '6vw' : 0,
     maxWidth: isMobile ? '100vw' : '52vw',
@@ -718,57 +742,33 @@ function ExpenseSection({
       ? expense.descriptionCustom
       : expense.description;
 
-  if (expense.kind !== 'ni') {
-    return (
-      <div id={expense.id} style={makeExpenseSectionStyle(isMobile)}>
-        <div data-section-card style={{ ...sectionCardStyle, maxWidth: 'none' }}>
-          <h1 style={{ ...headingStyle, margin: '0 0 0.3rem', whiteSpace: 'nowrap', ...(expense.kind === 'rent' && { fontSize: 'clamp(2.6rem, 4.6vw, 4.4rem)' }) }}>{expense.label}</h1>
-          <p style={bodyStyle}>{description}</p>
-          <span style={{
-            ...numberStyle,
-            color: '#8b2216',
-            marginTop: 0,
-            whiteSpace: 'nowrap',
-          }}>
-            − £{expense.amount.toLocaleString()}
-            <span style={{
-              fontFamily: BODY,
-              fontStyle: 'normal',
-              fontWeight: 400,
-              fontSize: '0.95rem',
-              letterSpacing: 0,
-              color: 'rgba(26,26,22,0.45)',
-              marginLeft: 10,
-              verticalAlign: 'middle',
-              whiteSpace: 'nowrap',
-            }}>/month</span>
-            {expense.derived && (
-              <span style={{
-                fontFamily: SANS,
-                fontStyle: 'normal',
-                fontWeight: 400,
-                fontSize: '0.7rem',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: 'rgba(26,26,22,0.35)',
-                marginLeft: 10,
-                verticalAlign: 'middle',
-              }}>(auto)</span>
-            )}
-          </span>
-          {control}
-        </div>
-      </div>
-    );
-  }
+  // Mobile uses the compact text scale; desktop keeps the original sizing
+  // (with the rent-specific shrink so "Rent / Mortgage" still fits its row).
+  // NI's label is "National Insurance" — too wide for a single line on the
+  // desktop card, so it skips whiteSpace:nowrap and stays on the constrained
+  // 400px card so it wraps cleanly to two lines.
+  const heading = isMobile
+    ? { ...mobileHeadingStyle, margin: '0 0 0.3rem' }
+    : {
+        ...headingStyle,
+        margin: '0 0 0.3rem',
+        ...(expense.kind === 'ni' ? {} : { whiteSpace: 'nowrap' as const }),
+        ...(expense.kind === 'rent' && { fontSize: 'clamp(2.6rem, 4.6vw, 4.4rem)' }),
+      };
+  const body = isMobile ? mobileBodyStyle : bodyStyle;
+  const number = isMobile ? mobileNumberStyle : numberStyle;
+  const card = isMobile
+    ? { ...sectionCardStyle, maxWidth: 'none', padding: '1.2rem 0 1.5rem' }
+    : (expense.kind === 'ni' ? sectionCardStyle : { ...sectionCardStyle, maxWidth: 'none' });
+  const monthSuffixSize = isMobile ? '0.78rem' : '0.95rem';
 
   return (
     <div id={expense.id} style={makeExpenseSectionStyle(isMobile)}>
-      <div data-section-card style={sectionCardStyle}>
-        <h1 style={{ ...headingStyle, margin: '0 0 0.3rem' }}>{expense.label}</h1>
-        <p style={bodyStyle}>{description}</p>
+      <div data-section-card style={card}>
+        <h1 style={heading}>{expense.label}</h1>
+        <p style={body}>{description}</p>
         <span style={{
-          ...numberStyle,
+          ...number,
           color: '#8b2216',
           marginTop: 0,
           whiteSpace: 'nowrap',
@@ -778,15 +778,13 @@ function ExpenseSection({
             fontFamily: BODY,
             fontStyle: 'normal',
             fontWeight: 400,
-            fontSize: '0.95rem',
+            fontSize: monthSuffixSize,
             letterSpacing: 0,
             color: 'rgba(26,26,22,0.45)',
             marginLeft: 10,
             verticalAlign: 'middle',
             whiteSpace: 'nowrap',
-          }}>
-            /month
-          </span>
+          }}>/month</span>
           {expense.derived && (
             <span style={{
               fontFamily: SANS,
@@ -1342,11 +1340,13 @@ export default function MainExperience() {
             sections={sections}
             step={MODEL_Y_STEP}
             activeId={activeKind}
-            // Mobile pushes the model down so it sits below the text card.
-            // -1.4 felt right when the canvas equalled the small viewport,
-            // but at 100dvh the model's bottom kissed Safari's toolbar; -1.0
-            // keeps it in the lower half with comfortable clearance.
-            yOffset={isMobile ? -1.0 : 0}
+            // Mobile pushes the model into the lower portion of the canvas so
+            // the text card up top can breathe. With the compact mobile text
+            // styles (mobileHeadingStyle/etc.) the upper third stops at ~30%
+            // of dvh, so -1.6 puts the model centre at ~62% — plenty of clear
+            // space above (no overlap with descriptions like "National
+            // Insurance") and ~60pt clearance below before Safari's toolbar.
+            yOffset={isMobile ? -1.6 : 0}
           />
         </Canvas>
       </div>
@@ -1357,17 +1357,21 @@ export default function MainExperience() {
         {/* Income intro — keep the original (pre-pill) top padding so the
             opening "Starting with £X,XXX" sits where it always did. */}
         <div id="section-income" style={{ ...sectionStyle, paddingTop: isMobile ? '14vh' : 0 }}>
-          <div data-section-card style={sectionCardStyle}>
+          <div data-section-card style={isMobile ? { ...sectionCardStyle, padding: '1.2rem 0 1.5rem' } : sectionCardStyle}>
             <span style={labelStyle}>Your income</span>
-            <h1 style={{ ...headingStyle, margin: '0 0 1.6rem', fontSize: 'clamp(2rem, 3.8vw, 3.6rem)' }}>
+            <h1 style={{
+              ...(isMobile ? mobileHeadingStyle : headingStyle),
+              margin: '0 0 1.4rem',
+              fontSize: isMobile ? 'clamp(1.6rem, 6vw, 2.1rem)' : 'clamp(2rem, 3.8vw, 3.6rem)',
+            }}>
               <span style={{ display: 'block', lineHeight: 1, marginBottom: '0.15rem' }}>
                 Starting with
               </span>
-              <span style={{ ...numberStyle, color: '#1c4d2e', display: 'inline-block' }}>
+              <span style={{ ...(isMobile ? mobileNumberStyle : numberStyle), color: '#1c4d2e', display: 'inline-block' }}>
                 £{income.toLocaleString()}
               </span>
             </h1>
-            <p style={{ ...bodyStyle, margin: '0 0 1rem' }}>
+            <p style={{ ...(isMobile ? mobileBodyStyle : bodyStyle), margin: '0 0 1rem' }}>
               {mode === 'average'
                 ? 'Scroll to see where it goes, one line at a time.'
                 : "You're in custom mode. Adjust the sliders as you scroll."}
@@ -1389,12 +1393,12 @@ export default function MainExperience() {
 
         {/* Remaining balance */}
         <div id="section-remaining" style={sectionStyle}>
-          <div data-section-card style={sectionCardStyle}>
+          <div data-section-card style={isMobile ? { ...sectionCardStyle, padding: '1.2rem 0 1.5rem' } : sectionCardStyle}>
             <span style={labelStyle}>What's left</span>
             <h1 style={{
-              ...headingStyle,
+              ...(isMobile ? mobileHeadingStyle : headingStyle),
               margin: '0 0 0.3rem',
-              fontSize: 'clamp(2.4rem, 4.6vw, 4rem)',
+              fontSize: isMobile ? 'clamp(1.9rem, 7.4vw, 2.6rem)' : 'clamp(2.4rem, 4.6vw, 4rem)',
             }}>
               {/* Non-breaking space keeps "The bottom" on one line at every viewport,
                   even inside the 400px section card. */}
@@ -1417,11 +1421,11 @@ export default function MainExperience() {
               </span>
               .
             </h1>
-            <p style={{ ...bodyStyle, margin: '0 0 0.2rem' }}>
+            <p style={{ ...(isMobile ? mobileBodyStyle : bodyStyle), margin: '0 0 0.2rem' }}>
               After your expenses, you're left with
             </p>
             <span style={{
-              ...numberStyle,
+              ...(isMobile ? mobileNumberStyle : numberStyle),
               color: netRemaining < 0 ? '#8b2216' : '#1c442a',
               whiteSpace: 'nowrap',
             }}>
@@ -1430,7 +1434,7 @@ export default function MainExperience() {
                 fontFamily: BODY,
                 fontStyle: 'normal',
                 fontWeight: 400,
-                fontSize: '0.95rem',
+                fontSize: isMobile ? '0.78rem' : '0.95rem',
                 letterSpacing: 0,
                 color: 'rgba(26,26,22,0.45)',
                 marginLeft: 10,
@@ -1444,11 +1448,11 @@ export default function MainExperience() {
               type="button"
               onClick={() => navigate('/affordability', { state: { income, monthlyRemaining: netRemaining } })}
               style={{
-                marginTop: '1.4rem',
+                marginTop: isMobile ? '1.1rem' : '1.4rem',
                 alignSelf: 'flex-start',
                 fontFamily: SANS,
-                fontSize: '0.82rem',
-                padding: '0.7rem 1.2rem',
+                fontSize: isMobile ? '0.78rem' : '0.82rem',
+                padding: isMobile ? '0.6rem 1.05rem' : '0.7rem 1.2rem',
                 border: '1px solid #1c4d2e',
                 borderRadius: 999,
                 background: '#1c4d2e',

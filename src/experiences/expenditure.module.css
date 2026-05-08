@@ -34,11 +34,17 @@
   position: relative;
 }
 
-/* Mobile: hide logo — the pill bar at top already establishes the page,
-   and a top-left mark would crowd it. */
+/* Mobile: shrink the logo and tuck it just below the top progress pill.
+   The pill is at top:max(env(safe-area-inset-top),14px) and is ~46px tall;
+   we land the logo ~12px below that so they read as a single header stack. */
 @media (max-width: 720px) {
   .logoWrap {
-    display: none;
+    top: calc(max(env(safe-area-inset-top), 14px) + 58px);
+    left: 14px;
+  }
+  .logoMask {
+    width: 36px;
+    height: 32px;
   }
 }
 
